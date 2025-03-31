@@ -1,3 +1,7 @@
+:host {
+  --lumo-primary-color: #333;
+}
+
 header nav a:any-link {
   text-decoration: none;
   padding: 0 var(--lumo-space-s);
@@ -23,4 +27,29 @@ header nav a[highlight] vaadin-icon {
 
 header nav a[highlight] {
   background-color: var(--lumo-primary-color-10pct);
+}
+
+.flex-25 {
+  flex: 0 0 25%;
+}
+
+.flex-75 {
+  flex: 0 0 75%;
+}
+
+.center {
+  margin: 0 auto;
+}
+
+.gap-0 {
+  gap: 0;
+}
+
+.view-h {
+  height: 900px;
+}
+
+.min-wh-30px {
+  width: 30px;
+  height: 30px;
 }
