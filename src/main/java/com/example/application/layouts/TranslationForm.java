@@ -16,8 +16,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
 
+import org.apache.commons.io.FilenameUtils;
+
 import com.example.application.config.AppConfig;
 import com.example.application.data.TranslationRequest;
+import com.example.application.exceptions.FileNotFound;
 import com.example.application.exceptions.FormValidationException;
 import com.example.application.exceptions.TranscriptionException;
 import com.example.application.utils.FileUtils;
@@ -159,8 +162,16 @@ public class TranslationForm extends VerticalLayout {
             currentTaskHandle
             .handle((textFile, throwable) -> {
                 if (throwable != null) {
-                    if (throwable instanceof CancellationException) {
+                    Throwable cause = throwable;
+                    // Unwrap the exception
+                    while (cause instanceof CompletionException && cause.getCause() != null) {
+                        cause = cause.getCause();
+                    }
+
+                    if (cause instanceof CancellationException) {
                         throw new TranscriptionException("", throwable);
+                    } else if (cause instanceof FileNotFound) {
+                        throw new FileNotFound(throwable.getMessage(), throwable);
                     } else {
                         throw new CompletionException(throwable);
                     }
@@ -181,7 +192,13 @@ public class TranslationForm extends VerticalLayout {
                 // Handle the outcome of the second task (textToSpeechAsync)
                 ui.access(() -> {
                     if (throwable != null) {
-                        Throwable cause = throwable instanceof CompletionException ? throwable.getCause() : throwable;
+                        Throwable cause = throwable;
+                        while (cause instanceof CompletionException && cause.getCause() != null) {
+                            cause = cause.getCause();
+                        }
+
+                        String errorMessage = cause != null ? cause.getMessage() : throwable.getMessage();
+
                         if (cause instanceof CancellationException) {
                             System.out.println("Text-to-speech task canceled");
                             Notification.show("Text-to-speech cancelled.", 3000, Notification.Position.TOP_CENTER);
@@ -193,7 +210,12 @@ public class TranslationForm extends VerticalLayout {
                             Notification.show("Transcription cancelled.", 3000, Notification.Position.TOP_CENTER);
                             transformButton.setEnabled(true);
                             progressDiv.setVisible(false);
-                        } else {
+                        } else if (cause instanceof FileNotFound) {
+                            Notification.show("Something went wrong try again later", 3000, Notification.Position.TOP_CENTER);
+                            System.out.println("Error finding a file: " + errorMessage);
+                            transformButton.setEnabled(true);
+                            progressDiv.setVisible(false);
+                        }else {
                             System.out.println("Text-to-speech task failed: " + throwable.getMessage());
                             Notification.show("Text-to-speech failed: " + throwable.getMessage(), 3000, Notification.Position.TOP_CENTER);
                             progressDiv.setVisible(false);
@@ -238,29 +260,51 @@ public class TranslationForm extends VerticalLayout {
             if (!outputDir.exists()) {
                 outputDir.mkdirs();
             }
-            transcriptionFile = new File(outputDir, UUID.randomUUID().toString() + ".ogg");
+
+            transcriptionFile = new File(outputDir, FilenameUtils.removeExtension(inputFile.getName())+ "_transcription.txt");
     
             try {
                 System.out.println("Entering transcribeAudioAsync");
-                int totalSteps = 10;
-                for (int i = 0; i <= totalSteps; i++) {
+                int totalSteps = 60;
+                // 2 minute timer
+                for (int i = 0; i <= totalSteps; i++) { 
+                    String pythonExecutable = "";
+                    String osName = System.getProperty("os.name").toLowerCase();
+                    File appRoot = AppConfig.getInstance().getAppRoot();
+
                     // Check for cancellation explicitly
                     if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
                         System.out.println("Task canceled, cleaning up...");
-
                         FileUtils.deleteFiles(transcriptionFile, inputFile);
 
                         return null;
                     }
     
+                    // Developement python location
+                    if (osName.contains("win")) { 
+                        pythonExecutable = new File("C:\\koulu\\vaadin\\vaadin-lopputyo\\.venv\\Scripts\\python.exe").getAbsolutePath();
+                    } else {
+                        pythonExecutable = new File("python").getAbsolutePath();
+                    }
+
+                    // Path to the Python script
+                    String pythonScriptPath = new File(appRoot + "/scripts/transcribe.pyy").getAbsolutePath();
+
+                    if (!new File(pythonExecutable).exists()) {
+                        throw new FileNotFound("Python executable not found in virtual environment: " + pythonExecutable);
+                    }
+                    if (!new File(pythonScriptPath).exists()) {
+                        throw new FileNotFound("Python script not found: " + pythonScriptPath);
+                    }
+
                     if (i == 0) {
                         System.out.println("Starting audio-to-text conversion...");
+                        // Launch the python script 
                     } else if (i == totalSteps) {
                         System.out.println("Conversion complete, writing output...");
                         Files.copy(inputFile.toPath(), transcriptionFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                     }
     
-                    // Update progress every 2 seconds
                     double progress = (double) i / totalSteps;
                     ui.access(() -> progressBar.setValue(progress));
     
@@ -271,6 +315,8 @@ public class TranslationForm extends VerticalLayout {
                 FileUtils.deleteFiles(inputFile);
                 System.out.println("Returning processed file: " + transcriptionFile.getAbsolutePath());
                 return transcriptionFile; // Success case
+            } catch(FileNotFound e){
+                throw new FileNotFound("File not found", e); 
             } catch (Exception e) {
                 System.out.println("Unexpected error during processing: " + e.getMessage());
                 e.printStackTrace();
@@ -344,8 +390,14 @@ public class TranslationForm extends VerticalLayout {
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
-        executor.shutdown();
+        if (currentTaskHandle != null && !currentTaskHandle.isDone()) {
+            currentTaskHandle.cancel(true);
 
+            transformButton.setVisible(true);
+        }
+
+        executor.shutdown();
+        
         FileUtils.deleteFiles(tempFile, transcriptionFile, textToSpeechFile);
 
         super.onDetach(detachEvent);

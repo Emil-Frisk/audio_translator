@@ -5,7 +5,7 @@ import os
 def transcribe_audio(audio_path, output_path):
     try:
         # Load the Whisper model (use a smaller model for faster processing, e.g., "base")
-        model = whisper.load_model("base")
+        model = whisper.load_model("tiny")
         
         # Transcribe the audio file
         result = model.transcribe(audio_path)
