@@ -1,6 +1,8 @@
 package com.example.application.utils;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class FileUtils {
     public static String getExtensionFromMimeType(String mimeType) {
@@ -31,5 +33,38 @@ public class FileUtils {
 
         // Fallback to working directory
         return new File(System.getProperty("user.dir"));
+    }
+
+    public static List<String> deleteFiles(File... files) {
+        List<String> failedDeletions = new ArrayList<>();
+
+        // Iterate over each file in the varargs array
+        for (File file : files) {
+            if (file == null) {
+                continue; // Skip null files
+            }
+
+            try {
+                // Check if the file exists
+                if (file.exists()) {
+                    // Attempt to delete the file
+                    if (file.delete()) {
+                        System.out.println("Deleted file: " + file.getAbsolutePath());
+                    } else {
+                        // File exists but couldn't be deleted
+                        failedDeletions.add(file.getAbsolutePath());
+                        System.err.println("Failed to delete file: " + file.getAbsolutePath());
+                    }
+                } else {
+                    System.out.println("File does not exist, skipping: " + file.getAbsolutePath());
+                }
+            } catch (SecurityException e) {
+                // Handle security exceptions (e.g., no permission to delete)
+                failedDeletions.add(file.getAbsolutePath());
+                System.err.println("Security exception while deleting file " + file.getAbsolutePath() + ": " + e.getMessage());
+            }
+        }
+
+        return failedDeletions;
     }
 }

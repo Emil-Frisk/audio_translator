@@ -1,27 +1,35 @@
 package com.example.application.layouts;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 
 import com.example.application.config.AppConfig;
 import com.example.application.data.TranslationRequest;
 import com.example.application.exceptions.FormValidationException;
+import com.example.application.exceptions.TranscriptionException;
 import com.example.application.utils.FileUtils;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
@@ -29,9 +37,11 @@ import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.FileBuffer;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.data.binder.ValidationException;
+import com.vaadin.flow.server.StreamResource;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import com.vaadin.flow.theme.lumo.LumoUtility.AlignItems;
 import com.vaadin.flow.theme.lumo.LumoUtility.Display;
+import com.vaadin.flow.theme.lumo.LumoUtility.JustifyContent;
 import com.vaadin.flow.theme.lumo.LumoUtility.Padding;
 
 public class TranslationForm extends VerticalLayout {
@@ -40,12 +50,15 @@ public class TranslationForm extends VerticalLayout {
     private final ProgressBar progressBar = new ProgressBar();
     private File uploadedFile;
     private File tempFile;
-    private File processedFile;
+    private File transcriptionFile;
+    private File textToSpeechFile;
     private String mimeType;
     private Button transformButton;
     private Button cancelButton;
     private Div progressDiv;
-    CompletableFuture<File> currentTask = null;
+    private Upload upload;
+    CompletableFuture<File> currentTaskHandle = null;
+    private Span statusSpan;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public TranslationForm() {
@@ -56,7 +69,7 @@ public class TranslationForm extends VerticalLayout {
 
         // File upload for audio file
         FileBuffer fileBuffer = new FileBuffer();
-        Upload upload = new Upload(fileBuffer);
+        upload = new Upload(fileBuffer);
         upload.setAcceptedFileTypes("audio/mpeg", "audio/wav", "audio/opus", "audio/ogg"); // Accept MP3 and WAV files
         upload.setMaxFileSize(200 * 1024 * 1024); // 200MB in bytes
         upload.addSucceededListener(event -> {
@@ -92,9 +105,16 @@ public class TranslationForm extends VerticalLayout {
 
         progressDiv = new Div();
         progressDiv.setWidthFull();
-        progressDiv.addClassNames(Display.FLEX, AlignItems.CENTER, Padding.Horizontal.SMALL);
+        progressDiv.addClassNames(Display.FLEX, Padding.Horizontal.SMALL, LumoUtility.FlexDirection.COLUMN);
+
+        Div progressRow = new Div();
+        progressRow.addClassNames(Display.FLEX, AlignItems.CENTER);
         progressBar.addClassNames(LumoUtility.Flex.GROW, Padding.Horizontal.SMALL);
-        progressDiv.add(progressBar, cancelButton);
+        progressRow.add(progressBar, cancelButton);
+        statusSpan = new Span("Processing...");
+        statusSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
+        progressDiv.add(progressRow, statusSpan);
+
         progressDiv.setVisible(false);
 
         add(h1, upload, targetLanguage, transformButton, progressDiv);
@@ -111,8 +131,8 @@ public class TranslationForm extends VerticalLayout {
            if (!audioFile.exists() || !audioFile.isFile()) {
                throw new FormValidationException("Uploaded file is invalid or missing");
            }
-           if (audioFile.length() > 10 * 1024 * 1024) {
-               throw new FormValidationException("File size exceeds 10MB");
+           if (audioFile.length() > 50 * 1024 * 1024) {
+               throw new FormValidationException("File size exceeds 50MB");
            }
 
            if (fileBuffer == null || mimeType == null) {
@@ -121,7 +141,8 @@ public class TranslationForm extends VerticalLayout {
 
            // Show progress bar
            progressBar.setValue(0.0);
-           toggleProgressVisibility();
+           transformButton.setEnabled(false);
+           progressDiv.setVisible(true);
 
            // Ensure fileBuffer and mimeType are set
            String extension = FileUtils.getExtensionFromMimeType(mimeType);
@@ -131,111 +152,178 @@ public class TranslationForm extends VerticalLayout {
 
            // Start async processing
            Notification.show("Starting to transcribe the audio to text...", 3000, Notification.Position.TOP_CENTER);
-           currentTask = transcribeAudioAsync(formData, ui);
+           statusSpan.setText("Transcribing audio...");
+           currentTaskHandle = transcribeAudioAsync(formData, ui);
 
-           currentTask.thenAccept(processedFile -> {
-               ui.access(() -> {
-                   toggleProgressVisibility();
-                   Notification.show("Translation complete! Download your file.", 3000, Notification.Position.TOP_CENTER);
-
-                   /// TODO - SPin up a new task for the single thread | text -> audio
-               });
-           }).exceptionally(throwable -> {
-               ui.access(() -> {
-                   progressDiv.setEnabled(false);
-                   transformButton.setEnabled(true);
-                   Notification.show("Processing failed: " + throwable.getMessage(), 3000, Notification.Position.TOP_CENTER);
-               });
-               return null; // TODO - ota selvää mihin tää null assignataan
-           });
-
-           // TODO - lisää cancel nappi joka pysäyttää threadin ja poistaa temp tiedoston jne jne
-           // TODO - debuggaa mikä ongelma threadin current taskin sammutamisen "errorin kanssa"
-
-           // Simulate audio processing (replace with actual processing logic)
-           // processAudio(formData);
-
-           // Hide progress bar and re-enable button
-           // progressBar.setVisible(false);
-           // transformButton.setEnabled(true);
+            // Chain the tasks
+            currentTaskHandle
+            .handle((textFile, throwable) -> {
+                if (throwable != null) {
+                    if (throwable instanceof CancellationException) {
+                        throw new TranscriptionException("", throwable);
+                    } else {
+                        throw new CompletionException(throwable);
+                    }
+                } else {
+                    // First task succeeded, start the second task
+                    ui.access(() -> {
+                        Notification.show("Transcription complete, starting text-to-speech task...", 3000, Notification.Position.TOP_CENTER);
+                        progressBar.setValue(0.0);
+                        statusSpan.setText("Converting text to audio...");
+                    });
+                    // Start the second task and update currentTaskHandle
+                    CompletableFuture<File> secondTask = textToSpeechAsync(textFile, ui);
+                    currentTaskHandle = secondTask; // Update to the second task
+                    return secondTask;
+                }
+                }).thenCompose(Function.identity())
+                .handle((newAudio, throwable) -> {
+                // Handle the outcome of the second task (textToSpeechAsync)
+                ui.access(() -> {
+                    if (throwable != null) {
+                        Throwable cause = throwable instanceof CompletionException ? throwable.getCause() : throwable;
+                        if (cause instanceof CancellationException) {
+                            System.out.println("Text-to-speech task canceled");
+                            Notification.show("Text-to-speech cancelled.", 3000, Notification.Position.TOP_CENTER);
+                            transformButton.setEnabled(true);
+                            progressDiv.setVisible(false);
+        
+                        }  else if (cause instanceof TranscriptionException){
+                            System.out.println("Transcription task canceled");
+                            Notification.show("Transcription cancelled.", 3000, Notification.Position.TOP_CENTER);
+                            transformButton.setEnabled(true);
+                            progressDiv.setVisible(false);
+                        } else {
+                            System.out.println("Text-to-speech task failed: " + throwable.getMessage());
+                            Notification.show("Text-to-speech failed: " + throwable.getMessage(), 3000, Notification.Position.TOP_CENTER);
+                            progressDiv.setVisible(false);
+                            transformButton.setEnabled(true);
+                        }
+                    } else {
+                        System.out.println("Text-to-speech task succeeded: " + newAudio.getAbsolutePath());
+                        Notification.show("Text-to-speech completed! Download the ready file.", 3000, Notification.Position.TOP_CENTER);
+                        transformButton.setEnabled(true);
+                        progressDiv.setVisible(false);
+                        // TODO: Offer the newAudio file for download
+                    }
+                });
+                return null;
+            });
         } catch (ValidationException e) {
             Notification.show("Please fill in all required fields.", 3000, Notification.Position.TOP_CENTER);
         } catch(FormValidationException e){
-            Notification.show("Please select an valid audio file "+e, 3000, Notification.Position.TOP_CENTER);
+            Notification.show("Please select an valid audio file ", 3000, Notification.Position.TOP_CENTER);
         } catch (IOException e) {
             Notification.show("Failed to store temporary file: " + e.getMessage(), 
                             3000, Notification.Position.TOP_CENTER);
             e.printStackTrace();
         }catch (Exception e) {
             Notification.show("An error occurred during processing. Please try again.", 3000, Notification.Position.TOP_CENTER);
-            progressBar.setVisible(false);
             transformButton.setEnabled(true);
         }
     }
 
     private void handleCancel(ClickEvent event, UI ui) {
-        // Clear form
-        if (currentTask != null && !currentTask.isDone()) {
-            currentTask.cancel(true);
-            ui.access(() -> {
-                toggleProgressVisibility();
-                Notification.show("Transcription cancelled.", 3000, Notification.Position.TOP_CENTER);
-            });
-            if (tempFile != null && tempFile.exists()) {
-                tempFile.delete();
-            }
+        if (currentTaskHandle != null && !currentTaskHandle.isDone()) {
+            currentTaskHandle.cancel(true);
+
+            transformButton.setVisible(true);
         }
     }
 
-    private CompletableFuture<File> transcribeAudioAsync(TranslationRequest request, UI ui){
+    private CompletableFuture<File> transcribeAudioAsync(TranslationRequest request, UI ui) {
         return CompletableFuture.supplyAsync(() -> {
-            try {
-            System.out.println("Entering processAudioAsync"); // Log entry
             File inputFile = request.getAudioFile();
-            File outputDir = new File(AppConfig.getInstance().getAppRoot(), "processed_audio");
+            File outputDir = new File(AppConfig.getInstance().getAppRoot(), "transcripts");
             if (!outputDir.exists()) {
                 outputDir.mkdirs();
             }
-            File processedFile = new File(outputDir, UUID.randomUUID().toString() + ".ogg");
-                // Simulate 10-minute processing with progress updates
-                int totalSteps = 30; // 10 minutes = 600 seconds, update every 2 seconds = 300 steps
+            transcriptionFile = new File(outputDir, UUID.randomUUID().toString() + ".ogg");
+    
+            try {
+                System.out.println("Entering transcribeAudioAsync");
+                int totalSteps = 10;
                 for (int i = 0; i <= totalSteps; i++) {
-                    // Simulate audio-to-text (replace with real Whisper logic)
-                    if (currentTask != null && currentTask.isCancelled()) {
-                        System.out.println("Task interrupted, cleaning up.. ");
-                        if (processedFile.exists()) {
-                            processedFile.delete();
-                        }
-                        currentTask = null;
-                        throw new InterruptedException("Transcription cancelled by user");
-                    } 
+                    // Check for cancellation explicitly
+                    if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
+                        System.out.println("Task canceled, cleaning up...");
 
+                        FileUtils.deleteFiles(transcriptionFile, inputFile);
+
+                        return null;
+                    }
+    
                     if (i == 0) {
                         System.out.println("Starting audio-to-text conversion...");
                     } else if (i == totalSteps) {
                         System.out.println("Conversion complete, writing output...");
-                        Files.copy(inputFile.toPath(), processedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        Files.copy(inputFile.toPath(), transcriptionFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                     }
-
+    
                     // Update progress every 2 seconds
                     double progress = (double) i / totalSteps;
                     ui.access(() -> progressBar.setValue(progress));
-
-                    Thread.sleep(2000); // 2 seconds
+    
+                    Thread.sleep(2000); // This can throw InterruptedException
                 }
-
-                // Clean up temp file
-                if (inputFile.exists()) {
-                    inputFile.delete();
-                }
-
-                System.out.println("Returning processed file: " + processedFile.getAbsolutePath());
-                return processedFile;
-            } catch(InterruptedException e) {
-                System.out.println("Transcription task succesfully closed.");
+    
+                // Clean up temp file on success
+                FileUtils.deleteFiles(inputFile);
+                System.out.println("Returning processed file: " + transcriptionFile.getAbsolutePath());
+                return transcriptionFile; // Success case
             } catch (Exception e) {
+                System.out.println("Unexpected error during processing: " + e.getMessage());
                 e.printStackTrace();
-                throw new RuntimeException("Audio processing failed", e);
+                throw new RuntimeException("Audio processing failed", e); // True error
+            }
+        }, executor);
+    }
+
+    private CompletableFuture<File> textToSpeechAsync(File textFile, UI ui) {
+        return CompletableFuture.supplyAsync(() -> {
+            File outputDir = new File(AppConfig.getInstance().getAppRoot(), "text_to_speech");
+            if (!outputDir.exists()) {
+                outputDir.mkdirs();
+            }
+
+            textToSpeechFile = new File(outputDir, UUID.randomUUID().toString() + ".ogg");
+    
+            try {
+                System.out.println("Entering textToSpeechAsync");
+                int totalSteps = 10;
+                for (int i = 0; i <= totalSteps; i++) {
+                    // Check for cancellation explicitly
+                    if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
+                        System.out.println("Task canceled, cleaning up...");
+
+                        FileUtils.deleteFiles(transcriptionFile, tempFile, textFile);
+
+                        return null;
+                    }
+    
+                    if (i == 0) {
+                        System.out.println("Starting audio-to-text conversion...");
+                    } else if (i == totalSteps) {
+                        System.out.println("Conversion complete, writing output...");
+                        Files.copy(textFile.toPath(), transcriptionFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    }
+    
+                    // Update progress every 2 seconds
+                    double progress = (double) i / totalSteps;
+                    ui.access(() -> progressBar.setValue(progress));
+    
+                    Thread.sleep(2000); // This can throw InterruptedException
+                }
+    
+                // Clean up temp file on success
+                FileUtils.deleteFiles(textFile);
+
+                System.out.println("Returning text to speech file: " + textToSpeechFile.getAbsolutePath());
+                return textToSpeechFile; // Success case
+            } catch (Exception e) {
+                System.out.println("Unexpected error during processing: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("Audio processing failed", e); // True error
             }
         }, executor);
     }
@@ -254,15 +342,12 @@ public class TranslationForm extends VerticalLayout {
         return tempFile;
     }
 
-    private void toggleProgressVisibility() {
-        progressDiv.setVisible(!progressDiv.isVisible());
-        transformButton.setEnabled(!transformButton.isEnabled());
-    }
-
     @Override
     protected void onDetach(DetachEvent detachEvent) {
-        // TODO - lisää tänne jotain cleanup paskaa, kuten temp filun poisto jne jne...
-        executor.shutdown(); // Clean up thread pool when form is detached
+        executor.shutdown();
+
+        FileUtils.deleteFiles(tempFile, transcriptionFile, textToSpeechFile);
+
         super.onDetach(detachEvent);
     }
 }

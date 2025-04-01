@@ -21,3 +21,8 @@ error-screenshots/
 webpack.generated.js
 temp_uploads
 temp_audios
+processed_audio
+text_to_speech
+transripts
+.venv
+ffmpeg-full_build
