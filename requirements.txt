@@ -1,1 +1,2 @@
-pip install -U openai-whisper
+pip install openai-whisper
+pip install gtts=2.5.4
