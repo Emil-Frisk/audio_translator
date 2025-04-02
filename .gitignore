@@ -22,6 +22,8 @@ webpack.generated.js
 temp_uploads
 temp_audios
 processed_audio
+translated_transcripts
+transcripts
 text_to_speech
 transripts
 .venv

@@ -166,157 +166,87 @@ public class TranslationForm extends VerticalLayout {
            // Start async processing
            Notification.show("Starting to transcribe the audio to text...", 3000, Notification.Position.TOP_CENTER);
            statusSpan.setText("Transcribing audio...");
-           currentTaskHandle = transcribeAudioAsync(formData, ui);
 
             // Chain the tasks
-            currentTaskHandle
+            // Start the first task
+            currentTaskHandle = transcribeAudioAsync(formData, ui)
             .handle((textFile, throwable) -> {
                 if (throwable != null) {
-                    Throwable cause = throwable;
-                    // Unwrap the exception
-                    while (cause instanceof CompletionException && cause.getCause() != null) {
-                        cause = cause.getCause();
-                    }
-
-                    if (cause instanceof CancellationException) {
-                        throw new TranscriptionException("", throwable);
-                    } else if (cause instanceof TimeoutException) {
-                        throw new TimeoutException(throwable.getMessage(), throwable);
-                    }else if (cause instanceof FileNotFound) {
-                        throw new FileNotFound(throwable.getMessage(), throwable);
-                    } else {
-                        throw new CompletionException(throwable);
-                    }
-                } else {
-                    // First task succeeded, start the second task
-                    ui.access(() -> {
-                        Notification.show("Transcription complete, starting translation task...", 3000, Notification.Position.TOP_CENTER);
-                        progressBar.setValue(0.0);
-                        statusSpan.setText("Translating transcript...");
-                    });
-                    // Start the second task and update currentTaskHandle
-                    CompletableFuture<File> secondTask = translateTextAsync(textFile, ui);
-                    currentTaskHandle = secondTask; // Update to the second task
-                    return secondTask;
+                    handleException(throwable, ui, "Transcription failed");
+                    return null; // Early exit by returning null
                 }
-                }).thenCompose(Function.identity())
-                .handle((translatedText, throwable) -> {
-                    // Handle the outcome of the second task (translate transcript)
-                    if (throwable != null) {
-                        Throwable cause = throwable;
-                        while (cause instanceof CompletionException && cause.getCause() != null) {
-                            cause = cause.getCause();
+                ui.access(() -> {
+                    Notification.show("Transcription complete, starting translation...", 3000, Notification.Position.TOP_CENTER);
+                    progressBar.setValue(0.0);
+                    statusSpan.setText("Translating transcript...");
+                });
+                return textFile;
+            })
+            .thenCompose(textFile -> {
+                if (textFile == null) {
+                    return CompletableFuture.completedFuture(null); // Propagate early exit
+                }
+                return translateTextAsync(textFile, ui)
+                    .handle((translatedText, throwable) -> {
+                        if (throwable != null) {
+                            handleException(throwable, ui, "Translation failed");
+                            return null; // Early exit
                         }
-
-                        String errorMessage = cause != null ? cause.getMessage() : throwable.getMessage();
-
-                        if (cause instanceof CancellationException) { // Todo kerro mikä task cancelattiin labelin avulla
-                            System.out.println("Text-to-speech task canceled");
-                            Notification.show("Text-to-speech cancelled.", 3000, Notification.Position.TOP_CENTER);
-                            transformButton.setEnabled(true);
-                            progressDiv.setVisible(false);
-                        }  else if (cause instanceof TranscriptionException){
-                            System.out.println("Transcription task canceled");
-                            Notification.show("Transcription cancelled.", 3000, Notification.Position.TOP_CENTER);
-                            transformButton.setEnabled(true);
-                            progressDiv.setVisible(false);
-                        } else if (cause instanceof FileNotFound) {
-                            Notification.show("Something went wrong try again later", 3000, Notification.Position.TOP_CENTER);
-                            System.out.println("Error finding a file: " + errorMessage);
-                            transformButton.setEnabled(true);
-                            progressDiv.setVisible(false);
-                        } else if(cause instanceof TimeoutException) {
-                            Notification.show("Task ran out time", 3000, Notification.Position.TOP_CENTER);
-                            transformButton.setEnabled(true);
-                            progressDiv.setVisible(false);
-                        } else {
-                            System.out.println("Text-to-speech task failed: " + throwable.getMessage());
-                            Notification.show("Text-to-speech failed: " + throwable.getMessage(), 3000, Notification.Position.TOP_CENTER);
-                            progressDiv.setVisible(false);
-                            transformButton.setEnabled(true);
+                        ui.access(() -> {
+                            Notification.show("Translation complete, starting text-to-speech...", 3000, Notification.Position.TOP_CENTER);
+                            statusSpan.setText("Generating speech...");
+                            progressBar.setValue(0.0);
+                            transformButton.setEnabled(false);
+                            progressDiv.setVisible(true);
+                        });
+                        return translatedText;
+                    });
+            })
+            .thenCompose(translatedText -> {
+                if (translatedText == null) {
+                    return CompletableFuture.completedFuture(null); // Propagate early exit
+                }
+                return textToSpeechAsync(translatedText, ui)
+                    .handle((speechFile, throwable) -> {
+                        if (throwable != null) {
+                            handleException(throwable, ui, "Text-to-speech failed");
+                            return null;
                         }
-
-                        cleanupFiles();
-                        cleanupMenu();
-                        if (subProcess != null) {
-                            subProcess.destroy();
-                        }
-                    } else {
-                        System.out.println("Translating transcript task succeeded: " + translatedText.getAbsolutePath());
-                        Notification.show("Translating transcript completed!", 3000, Notification.Position.TOP_CENTER);
-                        // Start the third task and update currentTaskHandle
-                        
-                        // CompletableFuture<File> thirdTask = textToSpeechAsync(translatedText, ui);
-                        // currentTaskHandle = thirdTask; // Update to the third task
-                        // return thirdTask;
+                        ui.access(() -> {
+                            Notification.show("All tasks completed successfully!", 3000, Notification.Position.TOP_CENTER);
+                            progressDiv.setVisible(false);
+                            transformButton.setEnabled(true);
+                        });
+                        System.out.println("Speech file generated: " + speechFile.getAbsolutePath());
+                        return speechFile;
+                    });
+            })
+            .whenComplete((result, throwable) -> {
+                if (result == null || throwable != null) {
+                    cleanupFiles();
+                    cleanupMenu();
+                    if (subProcess != null) {
+                        subProcess.destroy();
                     }
-                // .thenCompose(Function.identity())
-                // .handle((newAudio, throwable) -> {
-                // // Handle the outcome of the second task (textToSpeechAsync)
-                // ui.access(() -> {
-                //     if (throwable != null) {
-                //         Throwable cause = throwable;
-                //         while (cause instanceof CompletionException && cause.getCause() != null) {
-                //             cause = cause.getCause();
-                //         }
-
-                //         String errorMessage = cause != null ? cause.getMessage() : throwable.getMessage();
-
-                //         if (cause instanceof CancellationException) {
-                //             System.out.println("Text-to-speech task canceled");
-                //             Notification.show("Text-to-speech cancelled.", 3000, Notification.Position.TOP_CENTER);
-                //             transformButton.setEnabled(true);
-                //             progressDiv.setVisible(false);
-        
-                //         }  else if (cause instanceof TranscriptionException){
-                //             System.out.println("Transcription task canceled");
-                //             Notification.show("Transcription cancelled.", 3000, Notification.Position.TOP_CENTER);
-                //             transformButton.setEnabled(true);
-                //             progressDiv.setVisible(false);
-                //         } else if (cause instanceof FileNotFound) {
-                //             Notification.show("Something went wrong try again later", 3000, Notification.Position.TOP_CENTER);
-                //             System.out.println("Error finding a file: " + errorMessage);
-                //             transformButton.setEnabled(true);
-                //             progressDiv.setVisible(false);
-                //         } else if(cause instanceof TimeoutException) {
-                //             Notification.show("Task ran out time", 3000, Notification.Position.TOP_CENTER);
-                //             transformButton.setEnabled(true);
-                //             progressDiv.setVisible(false);
-                //         } else {
-                //             System.out.println("Text-to-speech task failed: " + throwable.getMessage());
-                //             Notification.show("Text-to-speech failed: " + throwable.getMessage(), 3000, Notification.Position.TOP_CENTER);
-                //             progressDiv.setVisible(false);
-                //             transformButton.setEnabled(true);
-                //         }
-
-                //         cleanupFiles();
-                //         cleanupMenu();
-                //         if (subProcess != null) {
-                //             subProcess.destroy();
-                //         }
-                //     } else {
-                //         System.out.println("Text-to-speech task succeeded: " + newAudio.getAbsolutePath());
-                //         Notification.show("Text-to-speech completed! Download the ready file.", 3000, Notification.Position.TOP_CENTER);
-                //         transformButton.setEnabled(true);
-                //         progressDiv.setVisible(false);
-                //         // TODO: Offer the newAudio file for download
-                //     }
-                // });
-                return null;
+                }
+                ui.access(() -> {
+                    transformButton.setEnabled(true);
+                    progressDiv.setVisible(false);
+                });
             });
-        } catch (ValidationException e) {
-            Notification.show("Please fill in all required fields.", 3000, Notification.Position.TOP_CENTER);
-        } catch(FormValidationException e){
-            Notification.show("Please select an valid audio file ", 3000, Notification.Position.TOP_CENTER);
-        } catch (IOException e) {
-            Notification.show("Failed to store temporary file: " + e.getMessage(), 
-                            3000, Notification.Position.TOP_CENTER);
-            e.printStackTrace();
-        }catch (Exception e) {
-            Notification.show("An error occurred during processing. Please try again.", 3000, Notification.Position.TOP_CENTER);
-            transformButton.setEnabled(true);
+            } catch (ValidationException e) {
+                Notification.show("Please fill in all required fields.", 3000, Notification.Position.TOP_CENTER);
+            } catch(FormValidationException e){
+                Notification.show("Please select an valid audio file ", 3000, Notification.Position.TOP_CENTER);
+            } catch (IOException e) {
+                Notification.show("Failed to store temporary file: " + e.getMessage(), 
+                                3000, Notification.Position.TOP_CENTER);
+                e.printStackTrace();
+            }catch (Exception e) {
+                Notification.show("An error occurred during processing. Please try again.", 3000, Notification.Position.TOP_CENTER);
+                transformButton.setEnabled(true);
+            }
         }
-    }
 
     private void handleCancel(ClickEvent event, UI ui) {
         if (currentTaskHandle != null && !currentTaskHandle.isDone()) {
@@ -324,6 +254,47 @@ public class TranslationForm extends VerticalLayout {
 
             transformButton.setVisible(true);
         }
+    }
+
+    private void handleException(Throwable throwable, UI ui, String context) {
+        if (throwable == null) {
+            ui.access(() -> {
+                Notification.show(context + ": An unknown error occurred.", 3000, Notification.Position.TOP_CENTER);
+                transformButton.setEnabled(true);
+                progressDiv.setVisible(false);
+            });
+            System.out.println(context + ": Throwable was null");
+            return;
+        }
+    
+        // Unwrap the exception using a temporary variable
+        Throwable cause = throwable;
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        // Assign the final result to a new effectively final variable
+        final Throwable rootCause = cause;
+    
+        // Get a safe error message
+        String errorMessage = rootCause.getMessage() != null ? rootCause.getMessage() : "Unknown error";
+    
+        ui.access(() -> {
+            if (rootCause instanceof CancellationException) {
+                Notification.show(context + ": Task cancelled.", 3000, Notification.Position.TOP_CENTER);
+            } else if (rootCause instanceof com.example.application.exceptions.TimeoutException) {
+                Notification.show(context + ": Task timed out.", 3000, Notification.Position.TOP_CENTER);
+            } else if (rootCause instanceof FileNotFound) {
+                Notification.show(context + ": File not found.", 3000, Notification.Position.TOP_CENTER);
+            } else if (rootCause instanceof TranscriptionException) {
+                Notification.show(context + ": Transcription error occurred.", 3000, Notification.Position.TOP_CENTER);
+            } else {
+                Notification.show(context + ": " + errorMessage, 3000, Notification.Position.TOP_CENTER);
+            }
+            transformButton.setEnabled(true);
+            progressDiv.setVisible(false);
+        });
+    
+        System.out.println(context + ": " + errorMessage + " (Exception type: " + rootCause.getClass().getSimpleName() + ")");
     }
 
     private CompletableFuture<File> transcribeAudioAsync(TranslationRequest request, UI ui) {
@@ -371,11 +342,11 @@ public class TranslationForm extends VerticalLayout {
                 if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
                     System.out.println("Task canceled, cleaning up...");
                     FileUtils.deleteFiles(transcriptionFile, inputFile);
-                    subProcess.destroy();
-                    return null;
+                    throw new CancellationException();
                 }
 
                 if (!subProcess.isAlive()) {
+                    checkProcessExitStatus(subProcess, "Transcripe script");
                     break;
                 }
 
@@ -389,6 +360,8 @@ public class TranslationForm extends VerticalLayout {
             FileUtils.deleteFiles(inputFile);
             System.out.println("Returning processed file: " + transcriptionFile.getAbsolutePath());
             return transcriptionFile; // Success case
+            } catch(CancellationException e) {
+                throw new CancellationException("Transcription cancelled"); 
             } catch(FileNotFound e){
                 throw new FileNotFound("File not found", e); 
             } catch(TimeoutException e) {
@@ -403,47 +376,71 @@ public class TranslationForm extends VerticalLayout {
 
     private CompletableFuture<File> textToSpeechAsync(File textFile, UI ui) {
         return CompletableFuture.supplyAsync(() -> {
-            File outputDir = new File(AppConfig.getInstance().getAppRoot(), "text_to_speech");
-            if (!outputDir.exists()) {
-                outputDir.mkdirs();
-            }
-            // implement text to speech script
-
-            String fileName = textFile.getName();
-            textToSpeechFile = new File(outputDir, FilenameUtils.removeExtension(fileName) + "_translated_audio" + FilenameUtils.getExtension(fileName));
-    
             try {
+                File outputDir = new File(AppConfig.getInstance().getAppRoot(), "text_to_speech");
+                if (!outputDir.exists()) {
+                    outputDir.mkdirs();
+                }
+                // implement text to speech script
+                String fileName = textFile.getName();
+                textToSpeechFile = new File(outputDir, FilenameUtils.removeExtension(fileName) + "_translated_audio" + ".mp3");
+        
+                String pythonScriptPath = new File(appRoot + "/scripts/tts.py").getAbsolutePath();
+
+                if (!new File(pythonScriptPath).exists()) {
+                    throw new FileNotFound("Python script not found: " + pythonScriptPath);
+                }
+
+                ProcessBuilder processBuilder = new ProcessBuilder(
+                                pythonExe,
+                                pythonScriptPath,
+                                textFile.getAbsolutePath(),
+                                textToSpeechFile.getAbsolutePath()
+                            );
+
+                subProcess = processBuilder.start();
+
+                
                 System.out.println("Entering textToSpeechAsync");
-                int totalSteps = 10;
+                int totalSteps = 240;
                 for (int i = 0; i <= totalSteps; i++) {
                     // Check for cancellation explicitly
                     if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
                         System.out.println("Task canceled, cleaning up...");
-
                         FileUtils.deleteFiles(transcriptionFile, tempFile, textFile);
-
-                        return null;
+                        throw new CancellationException();
                     }
     
                     if (i == 0) {
-                        System.out.println("Starting audio-to-text conversion...");
+                        System.out.println("Starting text to audio conversion...");
                     } else if (i == totalSteps) {
                         System.out.println("Conversion complete, writing output...");
                         Files.copy(textFile.toPath(), transcriptionFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                     }
     
+                    if (!subProcess.isAlive()) {
+                        checkProcessExitStatus(subProcess, "TTS script");
+                        break;
+                    }
+
                     // Update progress every 2 seconds
                     double progress = (double) i / totalSteps;
                     ui.access(() -> progressBar.setValue(progress));
     
-                    Thread.sleep(2000); // This can throw InterruptedException
+                    Thread.sleep(2000);
                 }
     
                 // Clean up temp file on success
-                // FileUtils.deleteFiles(textFile); TODO - uncommenttaa myöhemmin
+                FileUtils.deleteFiles(textFile);
 
                 System.out.println("Returning text to speech file: " + textToSpeechFile.getAbsolutePath());
                 return textToSpeechFile; // Success case
+            } catch (IOException e) {
+                System.out.println("IOexception happened during tts " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("IOexception happened during tts", e);
+            } catch(CancellationException e) {
+                throw new CancellationException("TOS task cancelled");
             } catch (TimeoutException e) {
                 throw new TimeoutException("Text to audio timed out");
             }  catch (Exception e) {
@@ -483,10 +480,8 @@ public class TranslationForm extends VerticalLayout {
                     // Check for cancellation explicitly
                     if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
                         System.out.println("Task canceled, cleaning up...");
-
                         FileUtils.deleteFiles(transcriptionFile, tempFile, textFile);
-
-                        return null;
+                        throw new CancellationException();
                     }
     
                     if (i == 0) {
@@ -499,6 +494,7 @@ public class TranslationForm extends VerticalLayout {
                     }
     
                     if (!subProcess.isAlive()) {
+                        checkProcessExitStatus(subProcess, "translate script");
                         break;
                     }
 
@@ -510,11 +506,13 @@ public class TranslationForm extends VerticalLayout {
                 }
     
                 // Clean up temp file on success
-                // FileUtils.deleteFiles(textFile); TODO - uncommenttaa myöhemmin
+                FileUtils.deleteFiles(textFile);
 
                 System.out.println("Returning translated transcription file: " + translationFile.getAbsolutePath());
                 return translationFile; // Success case
-            } catch (TimeoutException e) {
+            } catch(CancellationException e) {
+                throw new CancellationException("Translation has been canceled!");
+            }catch (TimeoutException e) {
                 throw new TimeoutException("Translation timed out");
             } catch (Exception e) {
                 System.out.println("Unexpected error during translating: " + e.getMessage());
@@ -522,6 +520,17 @@ public class TranslationForm extends VerticalLayout {
                 throw new RuntimeException("Audio translating failed", e); // True error
             }
         }, executor);
+    }
+
+    private void checkProcessExitStatus(Process process, String errorMessage) throws RuntimeException {
+        if (process.exitValue() != 0) {
+            java.util.Scanner errorScanner = new java.util.Scanner(process.getErrorStream()).useDelimiter("\\A");
+            String errorOutput = errorScanner.hasNext() ? errorScanner.next() : "No error output available";
+            errorScanner.close();
+            
+            throw new RuntimeException(errorMessage + " failed with exit code " + 
+                process.exitValue() + ". Error output: " + errorOutput);
+        }
     }
 
     private File createTempFile(FileBuffer fileBuffer, String extension, File folderRoot, String tempSubDir) throws IOException {
