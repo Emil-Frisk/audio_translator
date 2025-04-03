@@ -75,7 +75,8 @@ def translate_text(text_file_path, output_path, target_lang):
             "french": "fr",
             "german": "de",
             "mandarin": "zh",
-            "japanese": "ja"
+            "japanese": "ja",
+            "finnish": "fi"
         }
         
         # Get the target language code (e.g., "es" for Spanish)

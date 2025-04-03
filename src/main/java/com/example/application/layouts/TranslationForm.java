@@ -1,6 +1,7 @@
 package com.example.application.layouts;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -58,15 +59,18 @@ public class TranslationForm extends VerticalLayout {
     private final Binder<TranslationRequest> binder = new Binder<>(TranslationRequest.class);
     private final TranslationRequest formData = new TranslationRequest();
     private final ProgressBar progressBar = new ProgressBar();
+    private String originalFileName;
     private File uploadedFile;
     private File tempFile;
     private File transcriptionFile;
     private File textToSpeechFile;
     private File translationFile;
+    private Anchor downloadLink;
     private String mimeType;
     private Button transformButton;
     private Button cancelButton;
     private Div progressDiv;
+    private Div downloadDiv;
     private Upload upload;
     private Process subProcess;
     private ComboBox<String> targetLanguage;
@@ -93,6 +97,7 @@ public class TranslationForm extends VerticalLayout {
             }
             uploadedFile = fileBuffer.getFileData().getFile();
             formData.setAudioFile(uploadedFile);
+            originalFileName = uploadedFile.getName();
         });
 
         upload.addFileRejectedListener(event -> {
@@ -101,7 +106,7 @@ public class TranslationForm extends VerticalLayout {
 
         // Target language selector
         targetLanguage = new ComboBox<>("Target Language");
-        List<String> languages = Arrays.asList("Spanish", "German");
+        List<String> languages = Arrays.asList("Spanish", "German", "Finnish");
         targetLanguage.setItems(languages);
         targetLanguage.setRequired(true);
         binder.forField(targetLanguage)
@@ -116,6 +121,9 @@ public class TranslationForm extends VerticalLayout {
         transformButton.addClickListener(event -> handleTransform(event, fileBuffer, ui));
         cancelButton.addClickListener(event -> handleCancel(event, ui));
 
+        downloadDiv = new Div();
+        downloadDiv.setWidthFull();
+
         progressDiv = new Div();
         progressDiv.setWidthFull();
         progressDiv.addClassNames(Display.FLEX, Padding.Horizontal.SMALL, LumoUtility.FlexDirection.COLUMN);
@@ -128,9 +136,15 @@ public class TranslationForm extends VerticalLayout {
         statusSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
         progressDiv.add(progressRow, statusSpan);
 
-        progressDiv.setVisible(false);
+        downloadLink = new Anchor("", "Download Translated Transcript"); 
+        downloadLink.getElement().setAttribute("download", true); 
+        downloadLink.addClassNames(LumoUtility.Margin.Top.SMALL, LumoUtility.FontWeight.BOLD);
+        downloadDiv.add(downloadLink);
 
-        add(h1, upload, targetLanguage, transformButton, progressDiv);
+        progressDiv.setVisible(false);
+        downloadDiv.setVisible(false);
+
+        add(h1, upload, targetLanguage, transformButton, progressDiv, downloadDiv);
     }
 
     private void handleTransform(ClickEvent event, FileBuffer fileBuffer, UI ui) {
@@ -156,10 +170,12 @@ public class TranslationForm extends VerticalLayout {
            progressBar.setValue(0.0);
            transformButton.setEnabled(false);
            progressDiv.setVisible(true);
+           downloadDiv.setVisible(false);
 
            // Ensure fileBuffer and mimeType are set
            String extension = FileUtils.getExtensionFromMimeType(mimeType);
            File appRoot = AppConfig.getInstance().getAppRoot();
+
            tempFile = createTempFile(fileBuffer, extension, appRoot, "temp_audios");
            formData.setAudioFile(tempFile);
 
@@ -189,36 +205,14 @@ public class TranslationForm extends VerticalLayout {
                 return translateTextAsync(textFile, ui)
                     .handle((translatedText, throwable) -> {
                         if (throwable != null) {
-                            handleException(throwable, ui, "Translation failed");
+                            handleException(throwable, ui, "Transcription translation failed");
                             return null; // Early exit
                         }
                         ui.access(() -> {
-                            Notification.show("Translation complete, starting text-to-speech...", 3000, Notification.Position.TOP_CENTER);
-                            statusSpan.setText("Generating speech...");
+                            Notification.show("Translation complete!", 3000, Notification.Position.TOP_CENTER);
                             progressBar.setValue(0.0);
-                            transformButton.setEnabled(false);
-                            progressDiv.setVisible(true);
                         });
                         return translatedText;
-                    });
-            })
-            .thenCompose(translatedText -> {
-                if (translatedText == null) {
-                    return CompletableFuture.completedFuture(null); // Propagate early exit
-                }
-                return textToSpeechAsync(translatedText, ui)
-                    .handle((speechFile, throwable) -> {
-                        if (throwable != null) {
-                            handleException(throwable, ui, "Text-to-speech failed");
-                            return null;
-                        }
-                        ui.access(() -> {
-                            Notification.show("All tasks completed successfully!", 3000, Notification.Position.TOP_CENTER);
-                            progressDiv.setVisible(false);
-                            transformButton.setEnabled(true);
-                        });
-                        System.out.println("Speech file generated: " + speechFile.getAbsolutePath());
-                        return speechFile;
                     });
             })
             .whenComplete((result, throwable) -> {
@@ -229,24 +223,54 @@ public class TranslationForm extends VerticalLayout {
                         subProcess.destroy();
                     }
                 }
-                ui.access(() -> {
-                    transformButton.setEnabled(true);
-                    progressDiv.setVisible(false);
-                });
-            });
-            } catch (ValidationException e) {
-                Notification.show("Please fill in all required fields.", 3000, Notification.Position.TOP_CENTER);
-            } catch(FormValidationException e){
-                Notification.show("Please select an valid audio file ", 3000, Notification.Position.TOP_CENTER);
-            } catch (IOException e) {
-                Notification.show("Failed to store temporary file: " + e.getMessage(), 
-                                3000, Notification.Position.TOP_CENTER);
-                e.printStackTrace();
-            }catch (Exception e) {
-                Notification.show("An error occurred during processing. Please try again.", 3000, Notification.Position.TOP_CENTER);
-                transformButton.setEnabled(true);
+
+            // Success case: Create a download link for the translated transcript
+            StreamResource resource = new StreamResource(
+            "translated_" + FilenameUtils.getBaseName(originalFileName) + ".txt",
+            () -> {
+                try {
+                    if (result.exists()) {
+                        return new FileInputStream(result);
+                    } else {
+                        System.err.println("File not found: " + result.getAbsolutePath());
+                        return new ByteArrayInputStream("Error: File not available".getBytes());
+                    }
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                    return new ByteArrayInputStream("Error: File not available".getBytes());
+                }
             }
+        );
+
+        resource.setContentType("text/plain");
+        resource.setCacheTime(0); 
+
+        ui.access(() -> {
+            Notification.show("Processing complete! Download your file below.", 3000, Notification.Position.TOP_CENTER);
+            transformButton.setEnabled(true);
+            progressDiv.setVisible(false);
+            downloadDiv.setVisible(true);
+            downloadLink.setHref(resource);
+            downloadDiv.setVisible(true);
+        });
+
+        // TODO tallenna teksti tietokantaan sen id:n perusteella
+        
+
+        });
+        } catch (ValidationException e) {
+            Notification.show("Please fill in all required fields.", 3000, Notification.Position.TOP_CENTER);
+        } catch(FormValidationException e){
+            Notification.show("Please select an valid audio file ", 3000, Notification.Position.TOP_CENTER);
+        } catch (IOException e) {
+            Notification.show("Failed to store temporary file: " + e.getMessage(), 
+                            3000, Notification.Position.TOP_CENTER);
+            e.printStackTrace();
+        }catch (Exception e) {
+            Notification.show("An error occurred during processing. Please try again.", 3000, Notification.Position.TOP_CENTER);
+            transformButton.setEnabled(true);
         }
+    }
 
     private void handleCancel(ClickEvent event, UI ui) {
         if (currentTaskHandle != null && !currentTaskHandle.isDone()) {
@@ -322,7 +346,7 @@ public class TranslationForm extends VerticalLayout {
                                 inputFile.getAbsolutePath(),
                                 transcriptionFile.getAbsolutePath()
                             );
-
+                processBuilder.redirectErrorStream(true); // Merge stderr into stdout
                 subProcess = processBuilder.start();
                 
                 // 2 minute timer
@@ -397,7 +421,7 @@ public class TranslationForm extends VerticalLayout {
                                 textFile.getAbsolutePath(),
                                 textToSpeechFile.getAbsolutePath()
                             );
-
+                processBuilder.redirectErrorStream(true); // Merge stderr into stdout
                 subProcess = processBuilder.start();
 
                 
@@ -473,8 +497,9 @@ public class TranslationForm extends VerticalLayout {
                             );
 
                 processBuilder.environment().put("PYTHONUNBUFFERED", "1");
+                processBuilder.redirectErrorStream(true); // Merge stderr into stdout
                 subProcess = processBuilder.start();
-                // TODO kato miten transcription function toim
+
                 int totalSteps = 120;
                 for (int i = 0; i <= totalSteps; i++) {
                     // Check for cancellation explicitly
@@ -502,7 +527,7 @@ public class TranslationForm extends VerticalLayout {
                     double progress = (double) i / totalSteps;
                     ui.access(() -> progressBar.setValue(progress));
     
-                    Thread.sleep(2000); // This can throw InterruptedException
+                    Thread.sleep(2000);
                 }
     
                 // Clean up temp file on success
@@ -522,14 +547,15 @@ public class TranslationForm extends VerticalLayout {
         }, executor);
     }
 
+    // Assumes stdout & stderr are merged
     private void checkProcessExitStatus(Process process, String errorMessage) throws RuntimeException {
         if (process.exitValue() != 0) {
-            java.util.Scanner errorScanner = new java.util.Scanner(process.getErrorStream()).useDelimiter("\\A");
-            String errorOutput = errorScanner.hasNext() ? errorScanner.next() : "No error output available";
-            errorScanner.close();
+            java.util.Scanner outputScanner = new java.util.Scanner(process.getInputStream()).useDelimiter("\\A");
+            String combinedOutput = outputScanner.hasNext() ? outputScanner.next() : "No output available";
+            outputScanner.close();
             
             throw new RuntimeException(errorMessage + " failed with exit code " + 
-                process.exitValue() + ". Error output: " + errorOutput);
+                process.exitValue() + ". Combined output: " + combinedOutput);
         }
     }
 
