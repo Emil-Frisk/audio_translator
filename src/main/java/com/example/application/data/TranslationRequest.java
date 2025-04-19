@@ -6,7 +6,6 @@ public class TranslationRequest {
     private File audioFile;
     private String targetLanguage;
 
-    // Getters and setters
     public File getAudioFile() {
         return audioFile;
     }

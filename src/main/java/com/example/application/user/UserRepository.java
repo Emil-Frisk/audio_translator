@@ -23,19 +23,22 @@ public class UserRepository {
         this.jdbcClient = jdbcClient;
         this .jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = new BCryptPasswordEncoder();
-        createTranslatedAudioTable();
         createUserTable();
-        createUserAudioTable();
+        createTranslatedTranscriptTable();
+        // createUserTranscriptTable();
         createAdminUser();
     }
 
-    private void createTranslatedAudioTable() {
+    private void createTranslatedTranscriptTable() {
         jdbcClient.sql("""
-                    CREATE TABLE IF NOT EXISTS translated_audio (
+                    CREATE TABLE IF NOT EXISTS translated_transcript (
                     id INT NOT NULL AUTO_INCREMENT,
-                    duration INT NOT NULL,
-                    audio_language VARCHAR(250),
-                    audio_name VARCHAR(250) NOT NULL UNIQUE,
+                    user_id INT NOT NULL,
+                    text_language VARCHAR(16),
+                    uuid VARCHAR(36),
+                    text_name VARCHAR(250) NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES app_user(id),
                     PRIMARY KEY (id)
                     )
                     """).update();
@@ -53,17 +56,17 @@ public class UserRepository {
             """).update();
     }
 
-    private void createUserAudioTable() {
-        jdbcClient.sql("""
-                    CREATE TABLE IF NOT EXISTS user_translated_audio (
-                    user_id INT NOT NULL,
-                    translated_audio_id INT NOT NULL,
-                    PRIMARY KEY (user_id, translated_audio_id),
-                    FOREIGN KEY (user_id) REFERENCES app_user(id),
-                    FOREIGN KEY (translated_audio_id) REFERENCES translated_audio(id)
-                    )
-                    """).update();
-    }
+    // private void createUserTranscriptTable() {
+    //     jdbcClient.sql("""
+    //                 CREATE TABLE IF NOT EXISTS user_translated_transcript (
+    //                 user_id INT NOT NULL,
+    //                 translated_transcript_id INT NOT NULL,
+    //                 PRIMARY KEY (user_id, translated_transcript_id),
+    //                 FOREIGN KEY (user_id) REFERENCES app_user(id),
+    //                 FOREIGN KEY (translated_transcript_id) REFERENCES translated_transcript(id)
+    //                 )
+    //                 """).update();
+    // }
 
     private void createAdminUser() {
         String hashedPassword = passwordEncoder.encode("admin");

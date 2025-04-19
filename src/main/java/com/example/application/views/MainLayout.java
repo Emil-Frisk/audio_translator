@@ -11,6 +11,7 @@ import com.example.application.views.helloworld.AnemoiaView;
 import com.example.application.views.helloworld.GamingForm;
 import com.example.application.views.helloworld.TestForm;
 import com.example.application.views.helloworld.TestGridView;
+import com.example.application.views.transcripts.TranscriptsView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.HasElement;
@@ -58,6 +59,8 @@ import com.vaadin.flow.theme.lumo.LumoUtility.Width;
 public class MainLayout extends AppLayout implements RouterLayout {
     private MenuItemInfo signInButton;
     private MenuItemInfo profileButton;
+    private MenuItemInfo dashboardButton;
+    private MenuItemInfo transcriptsButton;
     private Registration listenerRegistration;
 
     /**
@@ -121,7 +124,6 @@ public class MainLayout extends AppLayout implements RouterLayout {
                     );
                 });
 
-
                 Div div = new Div();
                 div.add(menuBar);
                 div.addClassNames(Display.FLEX, Gap.XSMALL, Height.MEDIUM, AlignItems.CENTER, Padding.Horizontal.SMALL,
@@ -178,6 +180,8 @@ public class MainLayout extends AppLayout implements RouterLayout {
     private void updateNavigationVisibility() {
         signInButton.setVisible(!AuthService.isLoggedIn());
         profileButton.setVisible(AuthService.isLoggedIn());
+        transcriptsButton.setVisible(AuthService.isLoggedIn());
+        dashboardButton.setVisible(AuthService.isLoggedIn());
     }
 
     private VerticalLayout findContentArea(Component root) {
@@ -216,6 +220,10 @@ public class MainLayout extends AppLayout implements RouterLayout {
                 signInButton = menuItem;
             } else if (menuItem.getView() == MainLayout.class) {
                 profileButton = menuItem;
+            } else if (menuItem.getView() == TranscriptsView.class) {
+                transcriptsButton = menuItem;
+            }else if (menuItem.getView() == DashboardView.class) {
+                dashboardButton = menuItem;
             }
             list.add(menuItem);
         }
@@ -242,6 +250,8 @@ public class MainLayout extends AppLayout implements RouterLayout {
             new MenuItemInfo("Kolmas Linkki", null, TestForm.class),
             new MenuItemInfo("Gridding way", LineAwesomeIcon.ZHIHU.create(), TestGridView.class),
             new MenuItemInfo("Sign In", LineAwesomeIcon.AMBULANCE_SOLID.create(), SigninView.class),
+            new MenuItemInfo("Dashboard", LineAwesomeIcon.ANGRY.create(), DashboardView.class),
+            new MenuItemInfo("Transcripts", LineAwesomeIcon.ENVELOPE_OPEN_TEXT_SOLID.create(), TranscriptsView.class),
             new MenuItemInfo("", LineAwesomeIcon.POWER_OFF_SOLID.create(), MainLayout.class)
          };
     }

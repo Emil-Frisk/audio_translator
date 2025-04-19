@@ -1,8 +1,11 @@
 package com.example.application.views;
 
+import com.example.application.utils.AuthService;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.router.RouterLink;
@@ -11,7 +14,14 @@ import com.vaadin.flow.theme.lumo.LumoUtility.TextColor;
 
 @PageTitle("Home")
 @Route("")
-public class HomeView extends VerticalLayout {
+public class HomeView extends VerticalLayout implements BeforeEnterObserver{
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        if (AuthService.isLoggedIn()) {
+            event.rerouteTo("dashboard");
+        }
+    }
+
     public HomeView() {
         addClassNames("center", MaxWidth.SCREEN_XLARGE);
         Paragraph p = new Paragraph("Sign In");

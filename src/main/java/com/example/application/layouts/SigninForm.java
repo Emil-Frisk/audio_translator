@@ -56,8 +56,7 @@ public class SigninForm extends HorizontalLayout implements BeforeEnterObserver 
                 Authentication authResult = authenticationManager.authenticate(authReq);
                 SecurityContextHolder.getContext().setAuthentication(authResult);
                 LoginEventBus.getInstance().fireEvent();
-                UI.getCurrent().navigate("");
-                // TODO - tee ilmoitukset vääristä salasanoista
+                UI.getCurrent().navigate("/dashboard");
             } catch (ValidationException e) {
                 Notification.show("Validation failed: Please check the form fields.", 3000, Notification.Position.TOP_CENTER);
             } catch(UsernameNotFoundException e) {

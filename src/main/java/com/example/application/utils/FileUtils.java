@@ -1,8 +1,15 @@
 package com.example.application.utils;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.commons.io.FilenameUtils;
+
+import com.vaadin.flow.server.StreamResource;
 
 public class FileUtils {
     public static String getExtensionFromMimeType(String mimeType) {
@@ -70,4 +77,26 @@ public class FileUtils {
         return failedDeletions;
     }
 
+    public static StreamResource createStreamResource(String filepath, File file, String contentType) {
+        StreamResource resource = new StreamResource(
+                    filepath,
+                    () -> {
+                        try {
+                            if (file.exists()) {
+                                return new FileInputStream(file);
+                            } else {
+                                System.err.println("File not found: " + file.getAbsolutePath());
+                                return new ByteArrayInputStream("Error: File not available".getBytes());
+                            }
+                        } catch (FileNotFoundException e) {
+                            e.printStackTrace();
+                            return new ByteArrayInputStream("Error: File not available".getBytes());
+                        }
+                    }
+                );
+        
+        resource.setContentType(contentType);
+        resource.setCacheTime(0); 
+        return resource;
+    }
 }

@@ -1,4 +1,4 @@
-package com.example.application.user;
+package com.example.application.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +12,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
+import com.example.application.user.UserRepository;
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -24,13 +26,13 @@ public class SecurityConfig {
             .requireExplicitSave(false)
         )
         .authorizeHttpRequests(auth -> auth
-            .requestMatchers("/favorites/**", "/audios/**").authenticated()
+            .requestMatchers("/favorites/**", "/transcripts/**", "/dashboard/**").authenticated()
             .requestMatchers("/signin", "/signup", "/access-denied").permitAll()
             .anyRequest().permitAll()
         )
         .formLogin(form -> form
             .loginPage("/signin")
-            .defaultSuccessUrl("/", true)
+            .defaultSuccessUrl("/dashboard", true)
             .permitAll()
         )
         .logout(logout -> logout
@@ -48,17 +50,13 @@ public class SecurityConfig {
             if (user == null) {
                 throw new UsernameNotFoundException("User not found with email: " + email);
             }
-            return org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail())
-                .password(user.getUserPassword())
-                .roles(user.getUserRole())
-                .build();
+            return new CustomUserDetails(user.getEmail(), user.getUserPassword(), user.getUserRole(), user.getId());
         };
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(); // Same encoder you’re using
+        return new BCryptPasswordEncoder(); 
     }
 
     @Bean

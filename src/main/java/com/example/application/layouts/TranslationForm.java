@@ -19,14 +19,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
 
+import org.apache.commons.compress.utils.FileNameUtils;
 import org.apache.commons.io.FilenameUtils;
 
 import com.example.application.config.AppConfig;
+import com.example.application.data.TranslatedTranscript;
 import com.example.application.data.TranslationRequest;
 import com.example.application.exceptions.FileNotFound;
 import com.example.application.exceptions.FormValidationException;
 import com.example.application.exceptions.TimeoutException;
 import com.example.application.exceptions.TranscriptionException;
+import com.example.application.user.TranscriptRepository;
+import com.example.application.utils.AuthService;
 import com.example.application.utils.FileUtils;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.DetachEvent;
@@ -54,6 +58,7 @@ import com.vaadin.flow.theme.lumo.LumoUtility.Padding;
 import io.netty.util.Timeout;
 
 public class TranslationForm extends VerticalLayout {
+    private final int userId = AuthService.getCurrentUserId();
     private final String pythonExe = AppConfig.getInstance().getPythonExe();
     private final File appRoot = AppConfig.getInstance().getAppRoot();
     private final Binder<TranslationRequest> binder = new Binder<>(TranslationRequest.class);
@@ -73,21 +78,22 @@ public class TranslationForm extends VerticalLayout {
     private Div downloadDiv;
     private Upload upload;
     private Process subProcess;
+    private String fileUUID;
     private ComboBox<String> targetLanguage;
     CompletableFuture<File> currentTaskHandle = null;
     private Span statusSpan;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private TranscriptRepository transcriptRepository;
 
-    public TranslationForm() {
+    public TranslationForm(TranscriptRepository transcriptRepository) {
+        this.transcriptRepository = transcriptRepository;
         UI ui = UI.getCurrent();
 
-        // H1 header
         H1 h1 = new H1("Audio File Transformer");
 
-        // File upload for audio file
         FileBuffer fileBuffer = new FileBuffer();
         upload = new Upload(fileBuffer);
-        upload.setAcceptedFileTypes("audio/mpeg", "audio/wav", "audio/opus", "audio/ogg"); // Accept MP3 and WAV files
+        upload.setAcceptedFileTypes("audio/mpeg", "audio/wav", "audio/opus", "audio/ogg");
         upload.setMaxFileSize(200 * 1024 * 1024); // 200MB in bytes
         upload.addSucceededListener(event -> {
             mimeType = event.getMIMEType();
@@ -97,7 +103,7 @@ public class TranslationForm extends VerticalLayout {
             }
             uploadedFile = fileBuffer.getFileData().getFile();
             formData.setAudioFile(uploadedFile);
-            originalFileName = uploadedFile.getName();
+            originalFileName = event.getFileName();
         });
 
         upload.addFileRejectedListener(event -> {
@@ -176,6 +182,7 @@ public class TranslationForm extends VerticalLayout {
            String extension = FileUtils.getExtensionFromMimeType(mimeType);
            File appRoot = AppConfig.getInstance().getAppRoot();
 
+           // Create a temporary file to gain control of its lifetime
            tempFile = createTempFile(fileBuffer, extension, appRoot, "temp_audios");
            formData.setAudioFile(tempFile);
 
@@ -222,42 +229,49 @@ public class TranslationForm extends VerticalLayout {
                     if (subProcess != null) {
                         subProcess.destroy();
                     }
-                }
+                } else  {
 
-            // Success case: Create a download link for the translated transcript
-            StreamResource resource = new StreamResource(
-            "translated_" + FilenameUtils.getBaseName(originalFileName) + ".txt",
-            () -> {
-                try {
-                    if (result.exists()) {
-                        return new FileInputStream(result);
-                    } else {
-                        System.err.println("File not found: " + result.getAbsolutePath());
-                        return new ByteArrayInputStream("Error: File not available".getBytes());
+                // Success case: Create a download link for the translated transcript
+                String filePath = "translated_" + FilenameUtils.getBaseName(originalFileName) + ".txt";
+                StreamResource resource = new StreamResource(
+                    "translated_" + FilenameUtils.getBaseName(originalFileName) + ".txt",
+                    () -> {
+                        try {
+                            if (result.exists()) {
+                                return new FileInputStream(result);
+                            } else {
+                                System.err.println("File not found: " + result.getAbsolutePath());
+                                return new ByteArrayInputStream("Error: File not available".getBytes());
+                            }
+                        } catch (FileNotFoundException e) {
+                            e.printStackTrace();
+                            return new ByteArrayInputStream("Error: File not available".getBytes());
+                        }
                     }
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                    return new ByteArrayInputStream("Error: File not available".getBytes());
+                );
+        
+                resource.setContentType("text/plain");
+                resource.setCacheTime(0); 
+        
+                ui.access(() -> {
+                    Notification.show("Processing complete! Download your file below.", 3000, Notification.Position.TOP_CENTER);
+                    transformButton.setEnabled(true);
+                    progressDiv.setVisible(false);
+                    downloadDiv.setVisible(true);
+                    downloadLink.setHref(resource);
+                    downloadDiv.setVisible(true);
+                });
+        
+                try {
+                    transcriptRepository.create(new TranslatedTranscript(targetLanguage.getValue(), fileUUID, FilenameUtils.removeExtension(originalFileName), userId));
+                } catch (Exception e) {
+                    System.out.println("moi" + e);
                 }
             }
-        );
-
-        resource.setContentType("text/plain");
-        resource.setCacheTime(0); 
-
-        ui.access(() -> {
-            Notification.show("Processing complete! Download your file below.", 3000, Notification.Position.TOP_CENTER);
-            transformButton.setEnabled(true);
-            progressDiv.setVisible(false);
-            downloadDiv.setVisible(true);
-            downloadLink.setHref(resource);
-            downloadDiv.setVisible(true);
         });
-
-        // TODO tallenna teksti tietokantaan sen id:n perusteella
-        
-
-        });
+        } catch(IllegalStateException e) {
+            Notification.show("Something went wrong with saving your transcript.", 3000, Notification.Position.TOP_CENTER);
+            e.printStackTrace();
         } catch (ValidationException e) {
             Notification.show("Please fill in all required fields.", 3000, Notification.Position.TOP_CENTER);
         } catch(FormValidationException e){
@@ -377,7 +391,7 @@ public class TranslationForm extends VerticalLayout {
                 double progress = (double) i / totalSteps;
                 ui.access(() -> progressBar.setValue(progress));
 
-                Thread.sleep(2000); // This can throw InterruptedException
+                Thread.sleep(2000);
                 }
 
             // Clean up temp file on success
@@ -561,7 +575,8 @@ public class TranslationForm extends VerticalLayout {
 
     private File createTempFile(FileBuffer fileBuffer, String extension, File folderRoot, String tempSubDir) throws IOException {
         File originalTempFile = fileBuffer.getFileData().getFile();
-        String uniqueFileName = UUID.randomUUID().toString() + extension;
+        fileUUID = UUID.randomUUID().toString();
+        String uniqueFileName = fileUUID + extension;
         File tempDir = new File(folderRoot, tempSubDir);
         if (!tempDir.exists()) {
             tempDir.mkdirs();
