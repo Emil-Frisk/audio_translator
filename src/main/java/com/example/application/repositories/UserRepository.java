@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.Assert;
 
 import com.example.application.data.User;
+import com.example.application.data.UserProfile;
 
 @Repository
 public class UserRepository {
@@ -120,6 +121,20 @@ public class UserRepository {
         return result.orElse(null);
     }
 
+    public String getPreferredLanguage(int userId) {
+        var result = jdbcClient.sql("""
+                SELECT preferred_target_language FROM user_profile
+                WHERE user_id = :user_id
+                """)
+                .param("user_id", userId)
+                .query(String.class)
+                .optional()
+                .orElse(null);
+
+        int a = 10;
+        return result;
+    }
+
     public void savePreferredLanguage(int userId, String preferredLanguage) {
         int updated = jdbcClient.sql("""
                 UPDATE user_profile
@@ -130,14 +145,19 @@ public class UserRepository {
         .update();
 
         if (updated == 0) {
-            jdbcClient.sql("""
+            int updatedd = jdbcClient.sql("""
                 INSERT INTO user_profile (user_id, preferred_target_language, created_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP)
                 """)
                 .params(userId, preferredLanguage)
                 .update();
+            
+            if (updated != 0) {
+                System.out.println("User settings saved successfully!");
+            } else {
+                System.out.println("Something went wrong while saving user settings");
+            }
         }
 
-        System.out.println("User settings saved successfully!");
     }
 }

@@ -88,15 +88,16 @@ public class TranslationForm extends VerticalLayout {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TranscriptRepository transcriptRepository;
     private UserRepository userRepository;
+    private String preferredTargetLang;
 
     public TranslationForm(TranscriptRepository transcriptRepository, UserRepository userRepository) {
         this.transcriptRepository = transcriptRepository;
         this.userRepository = userRepository;
-        
-        UI ui = UI.getCurrent();
 
+        UI ui = UI.getCurrent();
         H1 h1 = new H1("Audio File Transformer");
 
+        getUserSettings();
         createUpload();
         createTargetLangBox();
         createButtons(ui);
@@ -106,7 +107,12 @@ public class TranslationForm extends VerticalLayout {
         add(h1, upload, targetLanguage, transformButton, progressDiv, downloadDiv);
     }
     private void getUserSettings() {
-
+        var result = userRepository.getPreferredLanguage(userId);
+        if (result == null) {
+            preferredTargetLang = null;
+        } else {
+            preferredTargetLang = LanguageUtils.toLanguageName(result);
+        }
     }
 
     private void createButtons(UI ui) {
@@ -145,7 +151,7 @@ public class TranslationForm extends VerticalLayout {
         List<String> languages = Arrays.asList("Spanish", "German", "Finnish");
         targetLanguage.setItems(languages);
         targetLanguage.setRequired(true);
-        // targetLanguage.setValue();
+        targetLanguage.setValue(preferredTargetLang);
         binder.forField(targetLanguage)
               .asRequired("Target language is required")
               .bind(TranslationRequest::getTargetLanguage, TranslationRequest::setTargetLanguage);
