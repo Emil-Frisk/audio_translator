@@ -1,8 +1,8 @@
-package com.example.application.views;
+package com.example.application.views.signin;
 
 import org.springframework.security.authentication.AuthenticationManager;
 
-import com.example.application.layouts.SigninForm;
+import com.example.application.views.signin.SigninForm;
 import com.vaadin.flow.component.dependency.CssImport;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.router.PageTitle;

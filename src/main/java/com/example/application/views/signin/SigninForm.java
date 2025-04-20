@@ -1,4 +1,4 @@
-package com.example.application.layouts;
+package com.example.application.views.signin;
 
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -10,7 +10,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import com.example.application.customEvents.LoginEventBus;
 import com.example.application.data.User;
 import com.example.application.utils.AuthService;
-import com.example.application.views.SignUpView;
+import com.example.application.views.signup.SignUpView;
 import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;

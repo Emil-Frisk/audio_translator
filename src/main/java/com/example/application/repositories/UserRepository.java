@@ -1,5 +1,6 @@
-package com.example.application.user;
+package com.example.application.repositories;
 
+import java.io.Console;
 import java.sql.PreparedStatement;
 import java.util.List;
 
@@ -25,7 +26,7 @@ public class UserRepository {
         this.passwordEncoder = new BCryptPasswordEncoder();
         createUserTable();
         createTranslatedTranscriptTable();
-        // createUserTranscriptTable();
+        createUserProfileTable();
         createAdminUser();
     }
 
@@ -34,7 +35,7 @@ public class UserRepository {
                     CREATE TABLE IF NOT EXISTS translated_transcript (
                     id INT NOT NULL AUTO_INCREMENT,
                     user_id INT NOT NULL,
-                    text_language VARCHAR(16),
+                    text_language VARCHAR(2),
                     uuid VARCHAR(36),
                     text_name VARCHAR(250) NOT NULL,
                     created_at DATETIME NOT NULL,
@@ -56,17 +57,18 @@ public class UserRepository {
             """).update();
     }
 
-    // private void createUserTranscriptTable() {
-    //     jdbcClient.sql("""
-    //                 CREATE TABLE IF NOT EXISTS user_translated_transcript (
-    //                 user_id INT NOT NULL,
-    //                 translated_transcript_id INT NOT NULL,
-    //                 PRIMARY KEY (user_id, translated_transcript_id),
-    //                 FOREIGN KEY (user_id) REFERENCES app_user(id),
-    //                 FOREIGN KEY (translated_transcript_id) REFERENCES translated_transcript(id)
-    //                 )
-    //                 """).update();
-    // }
+    private void createUserProfileTable() {
+        jdbcClient.sql("""
+                CREATE TABLE IF NOT EXISTS user_profile (
+                    user_id INT NOT NULL,
+                    preferred_target_language VARCHAR(2) NOT NULL,
+                    preferred_origin_language VARCHAR(2),
+                    created_at DATETIME NOT NULL,
+                    PRIMARY KEY (user_id),
+                    FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
+                )
+                """).update();
+    }
 
     private void createAdminUser() {
         String hashedPassword = passwordEncoder.encode("admin");
@@ -116,5 +118,26 @@ public class UserRepository {
             .optional();
 
         return result.orElse(null);
+    }
+
+    public void savePreferredLanguage(int userId, String preferredLanguage) {
+        int updated = jdbcClient.sql("""
+                UPDATE user_profile
+                SET preferred_target_language = ?
+                WHERE user_id = ?
+            """)
+        .params(preferredLanguage, userId)
+        .update();
+
+        if (updated == 0) {
+            jdbcClient.sql("""
+                INSERT INTO user_profile (user_id, preferred_target_language, created_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                """)
+                .params(userId, preferredLanguage)
+                .update();
+        }
+
+        System.out.println("User settings saved successfully!");
     }
 }

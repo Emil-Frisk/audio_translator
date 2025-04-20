@@ -1,6 +1,7 @@
 package com.example.application.views;
 
 import com.example.application.utils.AuthService;
+import com.example.application.views.signin.SigninView;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -31,7 +32,7 @@ public class HomeView extends VerticalLayout implements BeforeEnterObserver{
         link.setRoute(SigninView.class);
         link.add(p);
         add(new H1("Welcome to translate audio"));
-        add(new Paragraph("By signing in you can upload audio files and select target language and it will transform that audio in the new language."));
+        add(new Paragraph("By signing in you can upload english audio files and select target language and it will transform that audio into a translated transcript in your selected target language."));
         add(link);
     }
 }

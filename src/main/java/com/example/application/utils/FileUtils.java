@@ -77,9 +77,9 @@ public class FileUtils {
         return failedDeletions;
     }
 
-    public static StreamResource createStreamResource(String filepath, File file, String contentType) {
+    public static StreamResource createStreamResource(String filename, File file, String contentType) {
         StreamResource resource = new StreamResource(
-                    filepath,
+                filename,
                     () -> {
                         try {
                             if (file.exists()) {

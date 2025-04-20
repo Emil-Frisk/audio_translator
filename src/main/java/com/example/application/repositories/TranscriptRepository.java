@@ -1,4 +1,4 @@
-package com.example.application.user;
+package com.example.application.repositories;
 
 import java.util.List;
 
@@ -35,6 +35,15 @@ public class TranscriptRepository {
 
         Assert.state(updated == 1, "Failed to create translated transcript " + transcript.getText_name());
         System.out.println("successfully made translated transcript entry");
+    }
+
+    public void delete(String transcriptUuid) {
+        var updated = jdbcClient.sql("DELETE FROM translated_transcript WHERE uuid = ?")
+            .param(transcriptUuid)
+            .update();
+
+        Assert.state(updated == 1, "Failed to delete translated transcript with an id of: " + transcriptUuid);
+        System.out.println("successfully deleted translated transcription");
     }
 }
 

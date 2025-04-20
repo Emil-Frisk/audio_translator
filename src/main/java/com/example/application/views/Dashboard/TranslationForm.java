@@ -1,4 +1,4 @@
-package com.example.application.layouts;
+package com.example.application.views.Dashboard;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -29,9 +29,11 @@ import com.example.application.exceptions.FileNotFound;
 import com.example.application.exceptions.FormValidationException;
 import com.example.application.exceptions.TimeoutException;
 import com.example.application.exceptions.TranscriptionException;
-import com.example.application.user.TranscriptRepository;
+import com.example.application.repositories.TranscriptRepository;
+import com.example.application.repositories.UserRepository;
 import com.example.application.utils.AuthService;
 import com.example.application.utils.FileUtils;
+import com.example.application.utils.LanguageUtils;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
@@ -66,6 +68,7 @@ public class TranslationForm extends VerticalLayout {
     private final ProgressBar progressBar = new ProgressBar();
     private String originalFileName;
     private File uploadedFile;
+    private FileBuffer fileBuffer;
     private File tempFile;
     private File transcriptionFile;
     private File textToSpeechFile;
@@ -84,14 +87,40 @@ public class TranslationForm extends VerticalLayout {
     private Span statusSpan;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TranscriptRepository transcriptRepository;
+    private UserRepository userRepository;
 
-    public TranslationForm(TranscriptRepository transcriptRepository) {
+    public TranslationForm(TranscriptRepository transcriptRepository, UserRepository userRepository) {
         this.transcriptRepository = transcriptRepository;
+        this.userRepository = userRepository;
+        
         UI ui = UI.getCurrent();
 
         H1 h1 = new H1("Audio File Transformer");
 
-        FileBuffer fileBuffer = new FileBuffer();
+        createUpload();
+        createTargetLangBox();
+        createButtons(ui);
+        createProgressContainer();
+        createDownloadDiv();
+
+        add(h1, upload, targetLanguage, transformButton, progressDiv, downloadDiv);
+    }
+    private void getUserSettings() {
+
+    }
+
+    private void createButtons(UI ui) {
+        // buttons
+        transformButton = new Button("Transform");
+        cancelButton = new Button("cancel");
+        
+        // Event listeners
+        transformButton.addClickListener(event -> handleTransform(event, fileBuffer, ui));
+        cancelButton.addClickListener(event -> handleCancel(event, ui));
+    }
+
+    private void createUpload() {
+        fileBuffer = new FileBuffer();
         upload = new Upload(fileBuffer);
         upload.setAcceptedFileTypes("audio/mpeg", "audio/wav", "audio/opus", "audio/ogg");
         upload.setMaxFileSize(200 * 1024 * 1024); // 200MB in bytes
@@ -109,27 +138,20 @@ public class TranslationForm extends VerticalLayout {
         upload.addFileRejectedListener(event -> {
             Notification.show("Invalid file type. Please upload an MP3, opus, ogg or WAV file.", 3000, Notification.Position.TOP_CENTER);
         });
+    }
 
-        // Target language selector
+    private void createTargetLangBox() {
         targetLanguage = new ComboBox<>("Target Language");
         List<String> languages = Arrays.asList("Spanish", "German", "Finnish");
         targetLanguage.setItems(languages);
         targetLanguage.setRequired(true);
+        // targetLanguage.setValue();
         binder.forField(targetLanguage)
               .asRequired("Target language is required")
               .bind(TranslationRequest::getTargetLanguage, TranslationRequest::setTargetLanguage);
+    }
 
-        // buttons
-        transformButton = new Button("Transform");
-        cancelButton = new Button("cancel");
-        
-        // Event listeners
-        transformButton.addClickListener(event -> handleTransform(event, fileBuffer, ui));
-        cancelButton.addClickListener(event -> handleCancel(event, ui));
-
-        downloadDiv = new Div();
-        downloadDiv.setWidthFull();
-
+    private void createProgressContainer() {
         progressDiv = new Div();
         progressDiv.setWidthFull();
         progressDiv.addClassNames(Display.FLEX, Padding.Horizontal.SMALL, LumoUtility.FlexDirection.COLUMN);
@@ -141,16 +163,18 @@ public class TranslationForm extends VerticalLayout {
         statusSpan = new Span("Processing...");
         statusSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
         progressDiv.add(progressRow, statusSpan);
+        progressDiv.setVisible(false);
+    }
+
+    private void createDownloadDiv() {
+        downloadDiv = new Div();
+        downloadDiv.setWidthFull();
 
         downloadLink = new Anchor("", "Download Translated Transcript"); 
         downloadLink.getElement().setAttribute("download", true); 
         downloadLink.addClassNames(LumoUtility.Margin.Top.SMALL, LumoUtility.FontWeight.BOLD);
         downloadDiv.add(downloadLink);
-
-        progressDiv.setVisible(false);
         downloadDiv.setVisible(false);
-
-        add(h1, upload, targetLanguage, transformButton, progressDiv, downloadDiv);
     }
 
     private void handleTransform(ClickEvent event, FileBuffer fileBuffer, UI ui) {
@@ -233,25 +257,7 @@ public class TranslationForm extends VerticalLayout {
 
                 // Success case: Create a download link for the translated transcript
                 String filePath = "translated_" + FilenameUtils.getBaseName(originalFileName) + ".txt";
-                StreamResource resource = new StreamResource(
-                    "translated_" + FilenameUtils.getBaseName(originalFileName) + ".txt",
-                    () -> {
-                        try {
-                            if (result.exists()) {
-                                return new FileInputStream(result);
-                            } else {
-                                System.err.println("File not found: " + result.getAbsolutePath());
-                                return new ByteArrayInputStream("Error: File not available".getBytes());
-                            }
-                        } catch (FileNotFoundException e) {
-                            e.printStackTrace();
-                            return new ByteArrayInputStream("Error: File not available".getBytes());
-                        }
-                    }
-                );
-        
-                resource.setContentType("text/plain");
-                resource.setCacheTime(0); 
+                StreamResource resource = FileUtils.createStreamResource(filePath, result, "text/plain");
         
                 ui.access(() -> {
                     Notification.show("Processing complete! Download your file below.", 3000, Notification.Position.TOP_CENTER);
@@ -263,7 +269,8 @@ public class TranslationForm extends VerticalLayout {
                 });
         
                 try {
-                    transcriptRepository.create(new TranslatedTranscript(targetLanguage.getValue(), fileUUID, FilenameUtils.removeExtension(originalFileName), userId));
+                    String isoCode = LanguageUtils.toIsoCode(targetLanguage.getValue());
+                    transcriptRepository.create(new TranslatedTranscript(isoCode, fileUUID, FilenameUtils.removeExtension(originalFileName), userId));
                 } catch (Exception e) {
                     System.out.println("moi" + e);
                 }

@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 import com.example.application.data.TranslatedTranscript;
+import com.example.application.utils.LanguageUtils;
 
 public class TranscriptsViewModel {
     private String text_language;
@@ -36,7 +37,7 @@ public class TranscriptsViewModel {
     private LocalDateTime created_at;
 
     public String getText_language() {
-        return text_language;
+        return LanguageUtils.toLanguageName(text_language);
     }
     public void setText_language(String text_language) {
         this.text_language = text_language;

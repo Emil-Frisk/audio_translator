@@ -20,6 +20,7 @@ public class AuthService {
         if (principal instanceof CustomUserDetails) {
             return ((CustomUserDetails) principal).getUserId();
         }
+        
         return 0;
     }
 

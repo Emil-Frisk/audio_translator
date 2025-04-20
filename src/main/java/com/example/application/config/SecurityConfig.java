@@ -12,7 +12,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
-import com.example.application.user.UserRepository;
+import com.example.application.repositories.UserRepository;
 
 @Configuration
 @EnableWebSecurity
@@ -26,7 +26,7 @@ public class SecurityConfig {
             .requireExplicitSave(false)
         )
         .authorizeHttpRequests(auth -> auth
-            .requestMatchers("/favorites/**", "/transcripts/**", "/dashboard/**").authenticated()
+            .requestMatchers("/favorites/**", "/transcripts/**", "/dashboard/**", "/settings/**").authenticated()
             .requestMatchers("/signin", "/signup", "/access-denied").permitAll()
             .anyRequest().permitAll()
         )

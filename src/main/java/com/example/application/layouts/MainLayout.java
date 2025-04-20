@@ -1,4 +1,4 @@
-package com.example.application.views;
+package com.example.application.layouts;
 
 
 import java.util.stream.Collectors;
@@ -7,10 +7,9 @@ import org.vaadin.lineawesome.LineAwesomeIcon;
 
 import com.example.application.customEvents.LoginEventBus;
 import com.example.application.utils.AuthService;
-import com.example.application.views.helloworld.AnemoiaView;
-import com.example.application.views.helloworld.GamingForm;
-import com.example.application.views.helloworld.TestForm;
-import com.example.application.views.helloworld.TestGridView;
+import com.example.application.views.HomeView;
+import com.example.application.views.Dashboard.DashboardView;
+import com.example.application.views.signin.SigninView;
 import com.example.application.views.transcripts.TranscriptsView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -58,6 +57,7 @@ import com.vaadin.flow.theme.lumo.LumoUtility.Width;
 @AnonymousAllowed
 public class MainLayout extends AppLayout implements RouterLayout {
     private MenuItemInfo signInButton;
+    private MenuItemInfo homeButton;
     private MenuItemInfo profileButton;
     private MenuItemInfo dashboardButton;
     private MenuItemInfo transcriptsButton;
@@ -109,9 +109,9 @@ public class MainLayout extends AppLayout implements RouterLayout {
                 var rootItem = menuBar.addItem(profileIcon);
 
                 // Add dropdown items (e.g., Profile and Logout)
-                rootItem.getSubMenu().addItem("Profile", event -> {
+                rootItem.getSubMenu().addItem("Settings", event -> {
                     // Navigate to profile page or show profile dialog
-                    UI.getCurrent().navigate("profile");
+                    UI.getCurrent().navigate("settings");
                 });
                 rootItem.getSubMenu().addItem("Logout", event -> {
                     // Trigger a POST request to /logout using a hidden form
@@ -182,6 +182,7 @@ public class MainLayout extends AppLayout implements RouterLayout {
         profileButton.setVisible(AuthService.isLoggedIn());
         transcriptsButton.setVisible(AuthService.isLoggedIn());
         dashboardButton.setVisible(AuthService.isLoggedIn());
+        homeButton.setVisible(!AuthService.isLoggedIn());
     }
 
     private VerticalLayout findContentArea(Component root) {
@@ -203,7 +204,7 @@ public class MainLayout extends AppLayout implements RouterLayout {
         Div layout = new Div();
         layout.addClassNames(Display.FLEX, AlignItems.CENTER, Padding.Horizontal.LARGE);
 
-        H3 appName = new H3("First App");
+        H3 appName = new H3("Audio Transformer");
         appName.addClassNames(Margin.Vertical.MEDIUM, Margin.End.AUTO, FontSize.LARGE);
         layout.add(appName);
 
@@ -224,6 +225,8 @@ public class MainLayout extends AppLayout implements RouterLayout {
                 transcriptsButton = menuItem;
             }else if (menuItem.getView() == DashboardView.class) {
                 dashboardButton = menuItem;
+            } else if (menuItem.getView() == HomeView.class) {
+                homeButton = menuItem;
             }
             list.add(menuItem);
         }
@@ -243,16 +246,12 @@ public class MainLayout extends AppLayout implements RouterLayout {
     }
 
     private MenuItemInfo[] createMenuItems() {
-        return new MenuItemInfo[]{ //
+        return new MenuItemInfo[]{
             new MenuItemInfo("Home", LineAwesomeIcon.ADOBE.create(), HomeView.class), //
-            new MenuItemInfo("Anemoia", LineAwesomeIcon.ACCUSOFT.create(), AnemoiaView.class),
-            new MenuItemInfo("Gaming Details", LineAwesomeIcon.ANDROID.create(), GamingForm.class),
-            new MenuItemInfo("Kolmas Linkki", null, TestForm.class),
-            new MenuItemInfo("Gridding way", LineAwesomeIcon.ZHIHU.create(), TestGridView.class),
             new MenuItemInfo("Sign In", LineAwesomeIcon.AMBULANCE_SOLID.create(), SigninView.class),
             new MenuItemInfo("Dashboard", LineAwesomeIcon.ANGRY.create(), DashboardView.class),
             new MenuItemInfo("Transcripts", LineAwesomeIcon.ENVELOPE_OPEN_TEXT_SOLID.create(), TranscriptsView.class),
-            new MenuItemInfo("", LineAwesomeIcon.POWER_OFF_SOLID.create(), MainLayout.class)
+            new MenuItemInfo("", LineAwesomeIcon.ENVELOPE_OPEN_TEXT_SOLID.create(), MainLayout.class)
          };
     }
 
