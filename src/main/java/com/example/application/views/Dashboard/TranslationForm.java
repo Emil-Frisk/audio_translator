@@ -128,7 +128,7 @@ public class TranslationForm extends VerticalLayout {
         fileBuffer = new FileBuffer();
         upload = new Upload(fileBuffer);
         upload.setAcceptedFileTypes("audio/mpeg", "audio/wav", "audio/opus", "audio/ogg");
-        upload.setMaxFileSize(200 * 1024 * 1024); // 200MB in bytes
+        upload.setMaxFileSize(100 * 1024 * 1024); // 50mb in bytes
         upload.addSucceededListener(event -> {
             mimeType = event.getMIMEType();
             if (!mimeType.equals("audio/mpeg") && !mimeType.equals("audio/wav") && !mimeType.equals("audio/opus")  && !mimeType.equals("audio/ogg")) {
@@ -141,7 +141,7 @@ public class TranslationForm extends VerticalLayout {
         });
 
         upload.addFileRejectedListener(event -> {
-            Notification.show("Invalid file type. Please upload an MP3, opus, ogg or WAV file.", 3000, Notification.Position.TOP_CENTER);
+            Notification.show("Invalid file. Please upload an MP3, opus, ogg or WAV file that is under 100MB", 3000, Notification.Position.TOP_CENTER);
         });
     }
 
@@ -182,27 +182,8 @@ public class TranslationForm extends VerticalLayout {
         downloadDiv.setVisible(false);
     }
 
-    private void validateFormFields() {
-        binder.writeBean(formData);
-        File audioFile = formData.getAudioFile();
-        if (audioFile == null) {
-            throw new FormValidationException("An audio file is required");
-        }
-        if (!audioFile.exists() || !audioFile.isFile()) {
-            throw new FormValidationException("Uploaded file is invalid or missing");
-        }
-        if (audioFile.length() > 50 * 1024 * 1024) {
-            throw new FormValidationException("File size exceeds 50MB");
-        }
-
-        if (fileBuffer == null || mimeType == null) {
-            throw new FormValidationException("No valid file uploaded yet");
-        }
-    }
-
-    private void handleTransform(ClickEvent event, FileBuffer fileBuffer, UI ui) {
+    private boolean validateFormFields() {
         try {
-            // Validate all fields
             binder.writeBean(formData);
             File audioFile = formData.getAudioFile();
             if (audioFile == null) {
@@ -214,105 +195,125 @@ public class TranslationForm extends VerticalLayout {
             if (audioFile.length() > 50 * 1024 * 1024) {
                 throw new FormValidationException("File size exceeds 50MB");
             }
-    
+
             if (fileBuffer == null || mimeType == null) {
                 throw new FormValidationException("No valid file uploaded yet");
             }
-
-           // Show progress bar
-           progressBar.setValue(0.0);
-           transformButton.setEnabled(false);
-           progressDiv.setVisible(true);
-           downloadDiv.setVisible(false);
-
-           // Ensure fileBuffer and mimeType are set
-           String extension = FileUtils.getExtensionFromMimeType(mimeType);
-           File appRoot = AppConfig.getInstance().getAppRoot();
-
-           // Create a temporary file to gain control of its lifetime
-           tempFile = createTempFile(fileBuffer, extension, appRoot, "temp_audios");
-           formData.setAudioFile(tempFile);
-
-           // Start async processing
-           Notification.show("Starting to transcribe the audio to text...", 3000, Notification.Position.TOP_CENTER);
-           statusSpan.setText("Transcribing audio...");
-
-            // Chain the tasks
-            // Start the first task
-            currentTaskHandle = transcribeAudioAsync(formData, ui)
-            .handle((textFile, throwable) -> {
-                if (throwable != null) {
-                    handleException(throwable, ui, "Transcription failed");
-                    return null; // Early exit by returning null
-                }
-                ui.access(() -> {
-                    Notification.show("Transcription complete, starting translation...", 3000, Notification.Position.TOP_CENTER);
-                    progressBar.setValue(0.0);
-                    statusSpan.setText("Translating transcript...");
-                });
-                return textFile;
-            })
-            .thenCompose(textFile -> {
-                if (textFile == null) {
-                    return CompletableFuture.completedFuture(null); // Propagate early exit
-                }
-                return translateTextAsync(textFile, ui)
-                    .handle((translatedText, throwable) -> {
-                        if (throwable != null) {
-                            handleException(throwable, ui, "Transcription translation failed");
-                            return null; // Early exit
-                        }
-                        ui.access(() -> {
-                            Notification.show("Translation complete!", 3000, Notification.Position.TOP_CENTER);
-                            progressBar.setValue(0.0);
-                        });
-                        return translatedText;
-                    });
-            })
-            .whenComplete((result, throwable) -> {
-                if (result == null || throwable != null) {
-                    cleanupFiles();
-                    cleanupMenu();
-                    if (subProcess != null) {
-                        subProcess.destroy();
-                    }
-                } else  {
-
-                // Success case: Create a download link for the translated transcript
-                String filePath = "translated_" + FilenameUtils.getBaseName(originalFileName) + ".txt";
-                StreamResource resource = FileUtils.createStreamResource(filePath, result, "text/plain");
-        
-                ui.access(() -> {
-                    Notification.show("Processing complete! Download your file below.", 3000, Notification.Position.TOP_CENTER);
-                    transformButton.setEnabled(true);
-                    progressDiv.setVisible(false);
-                    downloadDiv.setVisible(true);
-                    downloadLink.setHref(resource);
-                    downloadDiv.setVisible(true);
-                });
-        
-                try {
-                    String isoCode = LanguageUtils.toIsoCode(targetLanguage.getValue());
-                    transcriptRepository.create(new TranslatedTranscript(isoCode, fileUUID, FilenameUtils.removeExtension(originalFileName), userId));
-                } catch (Exception e) {
-                    System.out.println("moi" + e);
-                }
-            }
-        });
-        } catch(IllegalStateException e) {
-            Notification.show("Something went wrong with saving your transcript.", 3000, Notification.Position.TOP_CENTER);
-            e.printStackTrace();
+            return true;
+        } catch(FormValidationException e) {
+            Notification.show("Please select an valid audio file: " +e.getMessage(), 3000, Notification.Position.TOP_CENTER);
+            return false;
         } catch (ValidationException e) {
             Notification.show("Please fill in all required fields.", 3000, Notification.Position.TOP_CENTER);
-        } catch(FormValidationException e){
-            Notification.show("Please select an valid audio file ", 3000, Notification.Position.TOP_CENTER);
+            return false;
+        } catch (Exception e) {
+            Notification.show("Unexpected error while validating the form ", 3000, Notification.Position.TOP_CENTER); 
+            return false;
+        }
+    }   
+
+    private void prepareComponentsForTransform() {
+        progressBar.setValue(0.0);
+        transformButton.setEnabled(false);
+        progressDiv.setVisible(true);
+        downloadDiv.setVisible(false);
+        statusSpan.setText("Transcriping audio...");
+    }
+
+    private boolean createTemporaryFile(FileBuffer fileBuffer, UI ui) {
+        try {
+            tempFile = createTempFile(fileBuffer, FileUtils.getExtensionFromMimeType(mimeType), appRoot, "temp_audios");
+            formData.setAudioFile(tempFile);
+            return true;
         } catch (IOException e) {
-            Notification.show("Failed to store temporary file: " + e.getMessage(), 
-                            3000, Notification.Position.TOP_CENTER);
+            Notification.show("Failed to store temporary file: " , 3000, Notification.Position.TOP_CENTER);
+            return false;
+        } catch (Exception e) {
+            Notification.show("Something went wrong with saving your transcript: " , 3000, Notification.Position.TOP_CENTER);
             e.printStackTrace();
-        }catch (Exception e) {
-            Notification.show("An error occurred during processing. Please try again.", 3000, Notification.Position.TOP_CENTER);
-            transformButton.setEnabled(true);
+            return false;
+        }
+    }
+
+    private void handleTransform(ClickEvent event, FileBuffer fileBuffer, UI ui) {
+        if (!validateFormFields()) return;
+
+        prepareComponentsForTransform();
+
+        if (!createTemporaryFile(fileBuffer, ui)) return;
+
+        processAudioAsync(ui);          
+    }
+
+    private void processAudioAsync(UI ui) {
+        // Start async processing | Chain the tasks
+        currentTaskHandle = transcribeAudioAsync(formData, ui)
+        .handle((textFile, throwable) -> {
+            if (throwable != null) {
+                handleException(throwable, ui, "Transcription failed");
+                return null; // Early exit by returning null
+            }
+            ui.access(() -> {
+                Notification.show("Transcription complete, starting translation...", 3000, Notification.Position.TOP_CENTER);
+                progressBar.setValue(0.0);
+                statusSpan.setText("Translating transcript...");
+            });
+            return textFile;
+        })
+        .thenCompose(textFile -> {
+            if (textFile == null) {
+                return CompletableFuture.completedFuture(null); // Propagate early exit
+            }
+            return translateTextAsync(textFile, ui)
+                .handle((translatedText, throwable) -> {
+                    if (throwable != null) {
+                        handleException(throwable, ui, "Transcription translation failed");
+                        return null; // Early exit
+                    }
+                    ui.access(() -> {
+                        Notification.show("Translation complete!", 3000, Notification.Position.TOP_CENTER);
+                        progressBar.setValue(0.0);
+                    });
+                    return translatedText;
+                });
+        })
+        .whenComplete((result, throwable) -> {
+            if (result == null || throwable != null) {
+                cleanupOnFailure();
+            } else  {
+                finalizeTransformation(result, ui);
+             }
+         });
+    }
+
+    private void finalizeTransformation(File result, UI ui) {
+        try {
+            String filePath = "translated_" + FilenameUtils.getBaseName(originalFileName) + ".txt";
+            StreamResource resource = FileUtils.createStreamResource(filePath, result, "text/plain");
+
+            ui.access(() -> {
+                Notification.show("Processing complete! Download your file below.", 3000, Notification.Position.TOP_CENTER);
+                transformButton.setEnabled(true);
+                progressDiv.setVisible(false);
+                downloadDiv.setVisible(true);
+                downloadLink.setHref(resource);
+                downloadDiv.setVisible(true);
+            });
+            String isoCode = LanguageUtils.toIsoCode(targetLanguage.getValue());
+            transcriptRepository.create(new TranslatedTranscript(isoCode, fileUUID, FilenameUtils.removeExtension(originalFileName), userId));
+        } catch (Exception e) {
+            ui.access(() -> {
+                Notification.show("Failed to finalize transformation... ", 3000, Notification.Position.TOP_CENTER);
+            });
+            e.printStackTrace();
+        }
+    }
+
+    private void cleanupOnFailure() {
+        cleanupFiles();
+        cleanupMenu();
+        if (subProcess != null) {
+            subProcess.destroy();
         }
     }
 
@@ -328,8 +329,7 @@ public class TranslationForm extends VerticalLayout {
         if (throwable == null) {
             ui.access(() -> {
                 Notification.show(context + ": An unknown error occurred.", 3000, Notification.Position.TOP_CENTER);
-                transformButton.setEnabled(true);
-                progressDiv.setVisible(false);
+                hideProgressDiv();
             });
             System.out.println(context + ": Throwable was null");
             return;
@@ -358,25 +358,27 @@ public class TranslationForm extends VerticalLayout {
             } else {
                 Notification.show(context + ": " + errorMessage, 3000, Notification.Position.TOP_CENTER);
             }
-            transformButton.setEnabled(true);
-            progressDiv.setVisible(false);
+            hideProgressDiv();
         });
     
         System.out.println(context + ": " + errorMessage + " (Exception type: " + rootCause.getClass().getSimpleName() + ")");
+    }
+
+    private void hideProgressDiv() {
+        transformButton.setEnabled(true);
+        progressDiv.setVisible(false);
     }
 
     private CompletableFuture<File> transcribeAudioAsync(TranslationRequest request, UI ui) {
         return CompletableFuture.supplyAsync(() -> {
             File inputFile = request.getAudioFile();
             File outputDir = new File(AppConfig.getInstance().getAppRoot(), "transcripts");
-            System.out.println(String.format("TranscripeAudioAsync: Inputfile path: %s", inputFile.getAbsolutePath()));
-            System.out.println(String.format("TranscripeAudioAsync: OutputDir path: %s", outputDir.getAbsolutePath()));
+            ui.access(() -> Notification.show("Starting to transcripe the audio to text...", 3000, Notification.Position.TOP_CENTER));
             if (!outputDir.exists()) {
                 outputDir.mkdirs();
             }
 
             transcriptionFile = new File(outputDir, FilenameUtils.removeExtension(inputFile.getName())+ "_transcription.txt");
-            System.out.println(String.format("TranscripeAudioAsync: TranscriptionFile path: %s", transcriptionFile.getAbsolutePath()));
     
             try {
                 System.out.println("Entering transcribeAudioAsync");
@@ -394,6 +396,7 @@ public class TranslationForm extends VerticalLayout {
                                 inputFile.getAbsolutePath(),
                                 transcriptionFile.getAbsolutePath()
                             );
+
                 processBuilder.redirectErrorStream(true); // Merge stderr into stdout
                 subProcess = processBuilder.start();
                 
