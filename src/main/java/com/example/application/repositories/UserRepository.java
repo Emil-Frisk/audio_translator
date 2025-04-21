@@ -4,6 +4,7 @@ import java.io.Console;
 import java.sql.PreparedStatement;
 import java.util.List;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -98,28 +99,16 @@ public class UserRepository {
                 .list();
     }
 
-    public int create(User user) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
+    public void create(User user) {
+
         String hashedPassword = passwordEncoder.encode(user.getUserPassword());
 
-        int updated = jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO app_user(email, user_password, user_role) VALUES (?, ?, ?)",
-                new String[]{"id"}
-            );
-            ps.setString(1, user.getEmail());
-            ps.setString(2, hashedPassword);
-            ps.setString(3, "USER");
-            return ps;
-        }, keyHolder);
-
-        Assert.state(updated == 1, "Failed to create user " + user.getEmail());
-
-        Number key = keyHolder.getKey();
-        
-        Assert.state(key != null, "Failed to retrieve generated ID foe user " + user.getEmail());
-
-        return key.intValue();
+        var updated = jdbcClient.sql("""
+                INSERT INTO app_user(email, user_password, user_role)
+                VALUES (?, ?, ?)
+            """)
+            .params(user.getEmail(), hashedPassword, "USER")
+            .update();
     }
 
     public User findByEmail(String email) {

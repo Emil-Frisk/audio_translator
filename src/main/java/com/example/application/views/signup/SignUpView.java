@@ -13,7 +13,7 @@ import com.vaadin.flow.theme.lumo.LumoUtility.MaxWidth;
 public class SignUpView extends HorizontalLayout{
     public SignUpView(UserRepository userRepository, AuthenticationManager authenticationManager) {
         setSizeFull();
-        addClassNames("center", MaxWidth.SCREEN_XLARGE);
+        addClassNames("center", MaxWidth.SCREEN_MEDIUM);
 
         SignupForm layout = new SignupForm(userRepository, authenticationManager);
         add(layout);

@@ -7,6 +7,7 @@ import org.vaadin.lineawesome.LineAwesomeIcon;
 
 import com.example.application.customEvents.LoginEventBus;
 import com.example.application.utils.AuthService;
+import com.example.application.views.AdminView;
 import com.example.application.views.HomeView;
 import com.example.application.views.Dashboard.DashboardView;
 import com.example.application.views.signin.SigninView;
@@ -28,6 +29,8 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.menubar.MenuBar;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.Layout;
 import com.vaadin.flow.router.Menu;
 import com.vaadin.flow.router.RouterLayout;
@@ -55,12 +58,13 @@ import com.vaadin.flow.theme.lumo.LumoUtility.Width;
  */
 @Layout
 @AnonymousAllowed
-public class MainLayout extends AppLayout implements RouterLayout {
+public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterObserver {
     private MenuItemInfo signInButton;
     private MenuItemInfo homeButton;
     private MenuItemInfo profileButton;
     private MenuItemInfo dashboardButton;
     private MenuItemInfo transcriptsButton;
+    private MenuItemInfo adminButton;
     private Registration listenerRegistration;
 
     /**
@@ -156,7 +160,7 @@ public class MainLayout extends AppLayout implements RouterLayout {
         updateNavigationVisibility();
         setContent(mainContent);
 
-        listenerRegistration = LoginEventBus.getInstance().addListener(() -> {updateNavigationVisibility(); });
+        // listenerRegistration = LoginEventBus.getInstance().addListener(() -> {updateNavigationVisibility(); });
     }
 
     @Override 
@@ -181,6 +185,7 @@ public class MainLayout extends AppLayout implements RouterLayout {
         signInButton.setVisible(!AuthService.isLoggedIn());
         profileButton.setVisible(AuthService.isLoggedIn());
         transcriptsButton.setVisible(AuthService.isLoggedIn());
+        adminButton.setVisible(AuthService.isAdmin());
         dashboardButton.setVisible(AuthService.isLoggedIn());
         homeButton.setVisible(!AuthService.isLoggedIn());
     }
@@ -227,6 +232,8 @@ public class MainLayout extends AppLayout implements RouterLayout {
                 dashboardButton = menuItem;
             } else if (menuItem.getView() == HomeView.class) {
                 homeButton = menuItem;
+            } else if(menuItem.getView() == AdminView.class) {
+                adminButton = menuItem;
             }
             list.add(menuItem);
         }
@@ -251,8 +258,13 @@ public class MainLayout extends AppLayout implements RouterLayout {
             new MenuItemInfo("Sign In", LineAwesomeIcon.AMBULANCE_SOLID.create(), SigninView.class),
             new MenuItemInfo("Dashboard", LineAwesomeIcon.ANGRY.create(), DashboardView.class),
             new MenuItemInfo("Transcripts", LineAwesomeIcon.ENVELOPE_OPEN_TEXT_SOLID.create(), TranscriptsView.class),
+            new MenuItemInfo("Admin", LineAwesomeIcon.EXCLAMATION_CIRCLE_SOLID.create(), AdminView.class),
             new MenuItemInfo("", LineAwesomeIcon.ENVELOPE_OPEN_TEXT_SOLID.create(), MainLayout.class)
          };
     }
 
+    @Override 
+    public void beforeEnter(BeforeEnterEvent event) {
+        updateNavigationVisibility();
+    }
 }

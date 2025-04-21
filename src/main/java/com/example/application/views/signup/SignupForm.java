@@ -1,5 +1,6 @@
 package com.example.application.views.signup;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -54,14 +55,16 @@ public class SignupForm extends HorizontalLayout implements BeforeEnterObserver 
         Button saveBtn = new Button("Sign Up", event -> {
             try {
                 binder.writeBean(formData);
-                int userId = userRepository.create(formData);
+                userRepository.create(formData);
                 UsernamePasswordAuthenticationToken authRequest =
                     new UsernamePasswordAuthenticationToken(formData.getEmail(), formData.getUserPassword());
                 Authentication authResult = authenticationManager.authenticate(authRequest);
                 SecurityContextHolder.getContext().setAuthentication(authResult);
-                LoginEventBus.getInstance().fireEvent();
-                UI.getCurrent().navigate("");
-            }  catch (ValidationException e) {
+                UI.getCurrent().navigate("/dashboard");
+            } catch (DuplicateKeyException e) {
+                Notification.show("This email is already in use", 3000, Notification.Position.TOP_CENTER);
+            }
+            catch (ValidationException e) {
                 Notification.show("Validation failed: Please check the form fields.", 3000, Notification.Position.TOP_CENTER);
             } catch(UsernameNotFoundException e) {
                 Notification.show("Password or email is wrong", 3000, Notification.Position.TOP_CENTER);

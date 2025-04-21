@@ -23,8 +23,6 @@ public class TranslationProvider implements I18NProvider {
     @Override
     public String getTranslation(String key, Locale locale, Object... params) {
         ResourceBundle bundle = ResourceBundle.getBundle(BUNDLE_NAME, locale);
-        System.out.println("Requested locale: " + locale);
-        System.out.println("JVM Default Locale: " + Locale.getDefault());
         String translation = bundle.getString(key);
 
         if (params.length > 0) {

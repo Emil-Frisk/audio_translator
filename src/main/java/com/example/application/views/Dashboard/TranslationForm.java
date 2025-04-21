@@ -92,7 +92,6 @@ public class TranslationForm extends VerticalLayout {
         this.transcriptRepository = transcriptRepository;
         this.userRepository = userRepository;
 
-        System.out.println(String.format("Enterin Translation form constructor: appRoot path: %s", appRoot.getAbsolutePath()));
         UI ui = UI.getCurrent();
         H1 h1 = new H1("Audio File Transformer");
 

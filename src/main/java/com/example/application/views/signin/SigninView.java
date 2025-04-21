@@ -15,7 +15,7 @@ import com.vaadin.flow.theme.lumo.LumoUtility.MaxWidth;
 public class SigninView extends HorizontalLayout{
     public SigninView(AuthenticationManager authenticationManager) {
         setSizeFull();
-        addClassNames("center", MaxWidth.SCREEN_XLARGE);
+        addClassNames("center", MaxWidth.SCREEN_MEDIUM);
 
         SigninForm layout = new SigninForm(authenticationManager);
         
