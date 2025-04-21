@@ -309,12 +309,16 @@ public class TranslationForm extends VerticalLayout {
         }
     }
 
-    private void cleanupOnFailure() {
-        cleanupFiles();
-        cleanupMenu();
+    private void destroySubProcess() {
         if (subProcess != null) {
             subProcess.destroy();
         }
+    }
+
+    private void cleanupOnFailure() {
+        cleanupFiles();
+        cleanupMenu();
+        destroySubProcess();
     }
 
     private void handleCancel(ClickEvent event, UI ui) {
@@ -416,7 +420,9 @@ public class TranslationForm extends VerticalLayout {
                 // Check for cancellation explicitly
                 if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
                     System.out.println("Task canceled, cleaning up...");
+                    destroySubProcess();
                     FileUtils.deleteFiles(transcriptionFile, inputFile);
+                    
                     throw new CancellationException();
                 }
 
@@ -483,6 +489,7 @@ public class TranslationForm extends VerticalLayout {
                     if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
                         System.out.println("Task canceled, cleaning up...");
                         FileUtils.deleteFiles(transcriptionFile, tempFile, textFile);
+                        destroySubProcess();
                         throw new CancellationException();
                     }
     
@@ -557,6 +564,7 @@ public class TranslationForm extends VerticalLayout {
                     if (currentTaskHandle != null && currentTaskHandle.isCancelled()) {
                         System.out.println("Task canceled, cleaning up...");
                         FileUtils.deleteFiles(transcriptionFile, tempFile, textFile);
+                        destroySubProcess();
                         throw new CancellationException();
                     }
     
@@ -626,7 +634,7 @@ public class TranslationForm extends VerticalLayout {
     }
 
     private void cleanupFiles() {
-        FileUtils.deleteFiles(tempFile, transcriptionFile, textToSpeechFile, translationFile);
+        FileUtils.deleteFiles(tempFile, transcriptionFile, textToSpeechFile);
     }
 
     private void cleanupMenu() {
