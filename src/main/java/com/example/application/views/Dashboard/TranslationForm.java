@@ -182,24 +182,42 @@ public class TranslationForm extends VerticalLayout {
         downloadDiv.setVisible(false);
     }
 
+    private void validateFormFields() {
+        binder.writeBean(formData);
+        File audioFile = formData.getAudioFile();
+        if (audioFile == null) {
+            throw new FormValidationException("An audio file is required");
+        }
+        if (!audioFile.exists() || !audioFile.isFile()) {
+            throw new FormValidationException("Uploaded file is invalid or missing");
+        }
+        if (audioFile.length() > 50 * 1024 * 1024) {
+            throw new FormValidationException("File size exceeds 50MB");
+        }
+
+        if (fileBuffer == null || mimeType == null) {
+            throw new FormValidationException("No valid file uploaded yet");
+        }
+    }
+
     private void handleTransform(ClickEvent event, FileBuffer fileBuffer, UI ui) {
         try {
             // Validate all fields
-           binder.writeBean(formData);
-           File audioFile = formData.getAudioFile();
-           if (audioFile == null) {
-               throw new FormValidationException("An audio file is required");
-           }
-           if (!audioFile.exists() || !audioFile.isFile()) {
-               throw new FormValidationException("Uploaded file is invalid or missing");
-           }
-           if (audioFile.length() > 50 * 1024 * 1024) {
-               throw new FormValidationException("File size exceeds 50MB");
-           }
-
-           if (fileBuffer == null || mimeType == null) {
-               throw new FormValidationException("No valid file uploaded yet");
-           }
+            binder.writeBean(formData);
+            File audioFile = formData.getAudioFile();
+            if (audioFile == null) {
+                throw new FormValidationException("An audio file is required");
+            }
+            if (!audioFile.exists() || !audioFile.isFile()) {
+                throw new FormValidationException("Uploaded file is invalid or missing");
+            }
+            if (audioFile.length() > 50 * 1024 * 1024) {
+                throw new FormValidationException("File size exceeds 50MB");
+            }
+    
+            if (fileBuffer == null || mimeType == null) {
+                throw new FormValidationException("No valid file uploaded yet");
+            }
 
            // Show progress bar
            progressBar.setValue(0.0);

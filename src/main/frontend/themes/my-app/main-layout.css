@@ -53,33 +53,3 @@ header nav a[highlight] {
   width: 30px;
   height: 30px;
 }
-
-.download-button {
-  text-decoration: none !important;
-  color: var(--lumo-body-text-color) !important;
-  
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: var(--lumo-space-s) var(--lumo-space-m) !important;
-  border-radius: var(--lumo-border-radius-m) !important;
-  background: var(--lumo-primary-color) !important; 
-  color: var(--lumo-primary-contrast-color) !important; 
-  cursor: pointer !important;
-  border: none !important;
-  box-shadow: var(--lumo-box-shadow-xs) !important;
-}
-
-.download-button:hover {
-  background: var(--lumo-primary-color-50pct) !important; 
-  box-shadow: var(--lumo-box-shadow-s) !important; 
-}
-
-.download-button:focus {
-  outline: none !important;
-  box-shadow: 0 0 0 3px var(--lumo-primary-color-50pct) !important;
-}
-
-.download-button:active {
-  background: var(--lumo-primary-color-10pct) !important; 
-}
