@@ -626,7 +626,7 @@ public class TranslationForm extends VerticalLayout {
     }
 
     private void cleanupFiles() {
-        FileUtils.deleteFiles(tempFile, transcriptionFile, textToSpeechFile);
+        FileUtils.deleteFiles(tempFile, transcriptionFile, textToSpeechFile, translationFile);
     }
 
     private void cleanupMenu() {

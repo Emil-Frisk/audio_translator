@@ -68,7 +68,7 @@ public class FileUtils {
                     System.out.println("File does not exist, skipping: " + file.getAbsolutePath());
                 }
             } catch (SecurityException e) {
-                // Handle security exceptions (e.g., no permission to delete)
+                // Handle security exceptions
                 failedDeletions.add(file.getAbsolutePath());
                 System.err.println("Security exception while deleting file " + file.getAbsolutePath() + ": " + e.getMessage());
             }
