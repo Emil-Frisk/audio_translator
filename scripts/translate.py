@@ -72,10 +72,7 @@ def translate_text(text_file_path, output_path, target_lang):
         # Map the target language to the Helsinki-NLP model code
         lang_map = {
             "spanish": "es",
-            "french": "fr",
             "german": "de",
-            "mandarin": "zh",
-            "japanese": "ja",
             "finnish": "fi"
         }
         

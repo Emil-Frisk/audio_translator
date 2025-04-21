@@ -3,6 +3,9 @@
 ### python version
 3.11.9
 
+### Start in development mode
+mvn spring-boot:run -Pdevelopment
+
 This project can be used as a starting point to create your own Vaadin application with Spring Boot.
 It contains all the necessary configuration and some placeholder files to get you started.
 

@@ -40,7 +40,8 @@ public class AppConfig {
         if (osName.contains("win")) { 
             pythonExecutable = new File("C:\\koulu\\vaadin\\vaadin-lopputyo\\.venv\\Scripts\\python.exe").getAbsolutePath();
         } else {// linux location
-            pythonExecutable = new File("python").getAbsolutePath();
+            // Docker/Linux environment: use the system-wide Python installed in /usr/local/bin
+            pythonExecutable = new File("/usr/local/bin/python").getAbsolutePath();
         }
 
         if (!new File(pythonExecutable).exists()) {
@@ -57,16 +58,22 @@ public class AppConfig {
             return new File(configuredRoot);
         }
 
-        // Try to find the project root by looking for pom.xml or .gitignore
-        File currentDir = new File(System.getProperty("user.dir"));
+        String osName = System.getProperty("os.name").toLowerCase();
+        if (osName.contains("win")) {  // for developement - TODO - remove later
+            File currentDir = new File(System.getProperty("user.dir"));
         while (currentDir != null) {
             if (new File(currentDir, "pom.xml").exists() || new File(currentDir, ".gitignore").exists()) {
                 return currentDir;
             }
             currentDir = currentDir.getParentFile();
         }
-
-        // Fallback to working directory
-        return new File(System.getProperty("user.dir"));
+            // Fallback to working directory
+            return new File(System.getProperty("user.dir"));
+        } else {// linux location
+            // Docker/Linux environment: use the system-wide Python installed in /usr/local/bin
+            File dockerAppRoot = new File("/app");
+            return dockerAppRoot;
+        }
+        
     }
 }

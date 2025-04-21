@@ -50,7 +50,7 @@ public class UserRepository {
         jdbcClient.sql("""
             CREATE TABLE IF NOT EXISTS app_user (
                 id INT NOT NULL AUTO_INCREMENT,
-                email VARCHAR(250) NOT NULL,
+                email VARCHAR(250) NOT NULL UNIQUE,
                 user_password VARCHAR(250) NOT NULL,
                 user_role VARCHAR(250) NOT NULL,
                 PRIMARY KEY (id)
@@ -72,14 +72,24 @@ public class UserRepository {
     }
 
     private void createAdminUser() {
-        String hashedPassword = passwordEncoder.encode("admin");
-
-        jdbcClient
-            .sql("INSERT INTO app_user (email, user_password, user_role) VALUES (?, ?, ?)")
+        // Check if admin user already exists
+        long adminCount = jdbcClient
+            .sql("SELECT COUNT(*) FROM app_user WHERE email = ?")
             .param("admin@admin.com")
-            .param(hashedPassword)
-            .param("ADMIN")
-            .update();
+            .query(Long.class)
+            .single();
+    
+        // Only create admin if it doesn't exist
+        if (adminCount == 0) {
+            String hashedPassword = passwordEncoder.encode("admin");
+    
+            jdbcClient
+                .sql("INSERT INTO app_user (email, user_password, user_role) VALUES (?, ?, ?)")
+                .param("admin@admin.com")
+                .param(hashedPassword)
+                .param("ADMIN")
+                .update();
+        }
     }
 
     public List<User> findAll() {
@@ -131,11 +141,10 @@ public class UserRepository {
                 .optional()
                 .orElse(null);
 
-        int a = 10;
         return result;
     }
 
-    public void savePreferredLanguage(int userId, String preferredLanguage) {
+    public boolean savePreferredLanguage(int userId, String preferredLanguage) {
         int updated = jdbcClient.sql("""
                 UPDATE user_profile
                 SET preferred_target_language = ?
@@ -152,12 +161,32 @@ public class UserRepository {
                 .params(userId, preferredLanguage)
                 .update();
             
-            if (updated != 0) {
+            if (updatedd != 0) {
                 System.out.println("User settings saved successfully!");
+                return true;
             } else {
                 System.out.println("Something went wrong while saving user settings");
+                return false;
             }
+        } else {
+            return true;
         }
+    }
 
+    public boolean deleteSettings(int userId) {
+        int updated = jdbcClient.sql("""
+                DELETE FROM user_profile 
+                WHERE user_id = ?
+                """)
+                .params(userId)
+                .update();
+
+        if (updated != 0) {
+            System.out.println("User settings deleted successfully!");
+            return true;
+        } else {
+            System.out.println("Something went wrong while deleting user settings");
+            return false;
+        }
     }
 }

@@ -38,6 +38,7 @@ import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
@@ -54,10 +55,7 @@ import com.vaadin.flow.server.StreamResource;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import com.vaadin.flow.theme.lumo.LumoUtility.AlignItems;
 import com.vaadin.flow.theme.lumo.LumoUtility.Display;
-import com.vaadin.flow.theme.lumo.LumoUtility.JustifyContent;
 import com.vaadin.flow.theme.lumo.LumoUtility.Padding;
-
-import io.netty.util.Timeout;
 
 public class TranslationForm extends VerticalLayout {
     private final int userId = AuthService.getCurrentUserId();
@@ -94,6 +92,7 @@ public class TranslationForm extends VerticalLayout {
         this.transcriptRepository = transcriptRepository;
         this.userRepository = userRepository;
 
+        System.out.println(String.format("Enterin Translation form constructor: appRoot path: %s", appRoot.getAbsolutePath()));
         UI ui = UI.getCurrent();
         H1 h1 = new H1("Audio File Transformer");
 
@@ -119,6 +118,7 @@ public class TranslationForm extends VerticalLayout {
         // buttons
         transformButton = new Button("Transform");
         cancelButton = new Button("cancel");
+        cancelButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
         
         // Event listeners
         transformButton.addClickListener(event -> handleTransform(event, fileBuffer, ui));
@@ -352,16 +352,20 @@ public class TranslationForm extends VerticalLayout {
         return CompletableFuture.supplyAsync(() -> {
             File inputFile = request.getAudioFile();
             File outputDir = new File(AppConfig.getInstance().getAppRoot(), "transcripts");
+            System.out.println(String.format("TranscripeAudioAsync: Inputfile path: %s", inputFile.getAbsolutePath()));
+            System.out.println(String.format("TranscripeAudioAsync: OutputDir path: %s", outputDir.getAbsolutePath()));
             if (!outputDir.exists()) {
                 outputDir.mkdirs();
             }
 
             transcriptionFile = new File(outputDir, FilenameUtils.removeExtension(inputFile.getName())+ "_transcription.txt");
+            System.out.println(String.format("TranscripeAudioAsync: TranscriptionFile path: %s", transcriptionFile.getAbsolutePath()));
     
             try {
                 System.out.println("Entering transcribeAudioAsync");
                 // Path to the Python script
                 String pythonScriptPath = new File(appRoot + "/scripts/transcribe.py").getAbsolutePath();
+                System.out.println(String.format("TranscripeAudioAsync: pythonScript path: %s", pythonScriptPath));
 
                 if (!new File(pythonScriptPath).exists()) {
                     throw new FileNotFound("Python script not found: " + pythonScriptPath);

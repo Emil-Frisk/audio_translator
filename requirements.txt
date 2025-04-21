@@ -1,2 +1,3 @@
 pip install openai-whisper
 pip install gtts=2.5.4
+pip install transfromers sentencepiece

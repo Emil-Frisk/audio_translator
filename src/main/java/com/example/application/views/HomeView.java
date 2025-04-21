@@ -25,14 +25,19 @@ public class HomeView extends VerticalLayout implements BeforeEnterObserver{
 
     public HomeView() {
         addClassNames("center", MaxWidth.SCREEN_XLARGE);
-        Paragraph p = new Paragraph("Sign In");
+
+        String title = getTranslation("home.title");
+        String description = getTranslation("home.description");
+        String signInText = getTranslation("home.signin");
+
+        Paragraph p = new Paragraph(signInText);
         RouterLink link = new RouterLink();
         link.addClassName(TextColor.BODY);
         link.getStyle().set("color", "var(--lumo-primary-text-color)");
         link.setRoute(SigninView.class);
         link.add(p);
-        add(new H1("Welcome to translate audio"));
-        add(new Paragraph("By signing in you can upload english audio files and select target language and it will transform that audio into a translated transcript in your selected target language."));
+        add(new H1(title));
+        add(new Paragraph(description));
         add(link);
     }
 }

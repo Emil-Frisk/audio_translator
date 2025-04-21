@@ -14,6 +14,7 @@ import com.vaadin.flow.theme.Theme;
  * and some desktop browsers.
  *
  */
+
 @SpringBootApplication
 @Theme(value = "my-app") 
 @Push
