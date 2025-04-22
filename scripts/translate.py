@@ -108,10 +108,7 @@ def translate_text(text_file_path, output_path, target_lang):
             # Generate translation
             translated = model.generate(**inputs)
             translated_text += tokenizer.decode(translated[0], skip_special_tokens=True)
-            translated_chunks.append(translated_text)
         
-        translated_text = " ".join(translated_chunks)
-
         # Save the translated text to the output file
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(translated_text)
