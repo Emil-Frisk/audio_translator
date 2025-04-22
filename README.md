@@ -42,7 +42,7 @@ The project is designed to be ran with docker. To run locally: You need to downl
 
 - **Limitations:** Currently the audio/transcription files are stored on the app container itself. For production app you would need to store them somewhere else
 
-- **Scalability Thoughts:** Running python scripts in the app container works for this prototypetype but isn't scalable. In a real app, you could split transcription, translation and tts into separatecontainers, chunk audio files for parallel processing, and recombine outputs.
+- **Scalability Thoughts:** Running python scripts in the app container works for this prototype but isn't scalable. In a real app, you could split transcription, translation and tts into separate containers, chunk audio files for parallel processing, and recombine outputs.
 
 ## Technical Details
 **Built with:** 
