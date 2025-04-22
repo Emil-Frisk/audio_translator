@@ -5,7 +5,7 @@ With this app you can upload English audio files and select a target language, a
 
 ## How to use it
 - Sign In
-- Upload an audio file
+- Upload an audio file (demo_audio folder has one)
 - Select audio file and target language
 - Press transform and sit back and relax
 - Download translated transcript
@@ -34,6 +34,9 @@ Make sure you have Docker installed, if you are on Windows you have to open Dock
 **Locally (Not recommended)**
 
 The project is designed to be ran with docker. To run locally: You need to download python version 3.11.9, build enviroment with it and run `pip install -r requirements.txt`. You also need to install ffmpeg, because the project relies on it. After that you have to edit the AppConfig to point to the correct python executable and project root.
+
+## Note
+- The app creates ADMIN user with these credentials: (admin@admin.com | admin)
 
 ## Additional Notes
 - **Original Plan**: I originally intented to build a pipeline which had three phases: transcript -> translation -> text-to-speech, but the text to audio models were too large to install locally and I decided against it.
